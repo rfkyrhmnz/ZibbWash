@@ -37,6 +37,7 @@ Selama server dijalankan di laptop, website hanya bisa dibuka saat laptop menyal
 |---|---|---|
 | Railway | Paket Hobby $5/bulan (sudah termasuk pemakaian $5) + volume $0,15/GB/bulan | Langkah paling singkat, tanpa berkas konfigurasi |
 | Render | Instance Starter $7/bulan + disk $0,25/GB/bulan | Ada `render.yaml`, pemasangan hampir otomatis |
+| Oracle Cloud Always Free | $0, tanpa batas waktu (butuh kartu untuk verifikasi) | Server virtual 24 jam dengan disk permanen. Lebih teknis dan ada risiko instance idle ditarik, lihat bagian Oracle di bawah |
 | Server virtual (VPS) | Sewa bulanan | Paling fleksibel, tetapi butuh langkah teknis sendiri (lihat catatan di bawah) |
 | Paket gratis | $0 | **Tidak cocok.** Di Render gratis, layanan mati setelah 15 menit sepi (pelanggan menunggu ±1 menit) dan data hilang tiap restart |
 
@@ -58,6 +59,54 @@ Gunakan wilayah server **Singapura** agar cepat dari Indonesia.
 3. Saat diminta `ADMIN_PASSWORD`, isi kata sandi admin yang kuat, lalu **Apply**.
 4. Tunggu deploy selesai, lalu buka alamat `https://zibbwash-xxxx.onrender.com`.
 
+### Oracle Cloud Always Free (gratis)
+
+Server virtual yang menyala terus dengan disk permanen, tanpa biaya bulanan. Lebih banyak langkah daripada Railway atau Render, tetapi skrip `deploy/oracle-setup.sh` mengerjakan semua yang di dalam server: Node.js, layanan otomatis hidup lagi saat server restart, firewall, HTTPS lewat Caddy, uji otomatis, dan salinan harian database.
+
+Siapkan dulu: nomor HP dan kartu kredit/debit untuk verifikasi (tidak ditagih kecuali kamu upgrade). Oracle menolak kartu virtual, sekali pakai, dan prepaid. **Home region** dipilih saat daftar dan tidak bisa diubah, jadi pilih yang terdekat dari Indonesia.
+
+1. Daftar di oracle.com/cloud/free.
+2. Buat kunci SSH di komputermu: jalankan `ssh-keygen -t ed25519` (tekan Enter terus), lalu tampilkan kunci publiknya. Windows PowerShell: `type $env:USERPROFILE\.ssh\id_ed25519.pub`. Mac/Linux: `cat ~/.ssh/id_ed25519.pub`.
+3. Di konsol Oracle: **Compute > Instances > Create instance**. Image: *Canonical Ubuntu* 24.04 (atau 22.04). Shape: **VM.Standard.E2.1.Micro** (berlabel Always Free-eligible). Di bagian SSH keys pilih *Paste public keys* dan tempel kunci publik tadi. Pastikan alamat IPv4 publik ikut dibuat, lalu **Create**.
+4. Buka port web: **Networking > Virtual cloud networks >** (VCN-mu) **> subnet > Security List > Add Ingress Rules**. Isi Source CIDR `0.0.0.0/0`, protokol TCP, port tujuan `80`. Ulangi untuk `443`.
+5. Sambungkan: `ssh ubuntu@IP_PUBLIK_SERVER`.
+6. Di dalam server:
+
+```bash
+git clone https://github.com/rfkyrhmnz/ZibbWash.git
+cd ZibbWash
+sudo bash deploy/oracle-setup.sh                 # uji coba lewat http://IP_PUBLIK (tanpa enkripsi)
+sudo bash deploy/oracle-setup.sh zibbwash.me     # dengan domain: HTTPS otomatis
+```
+
+   Di akhir, skrip mencetak **kata sandi admin awal satu kali** (username `admin`). Catat, masuk, lalu ganti lewat menu **Ganti kata sandi**.
+7. Arahkan domain: di pengelola DNS domainmu buat **A record** dengan nama `@` ke IP publik server (opsional `www` juga). Setelah itu jalankan perintah dengan domain di atas. Sertifikat HTTPS terbit otomatis begitu DNS sudah mengarah.
+
+Memperbarui ke versi terbaru:
+
+```bash
+cd ~/ZibbWash && git pull && sudo bash deploy/oracle-setup.sh
+```
+
+Domain diingat dari pemasangan sebelumnya (tersimpan di `/etc/zibbwash.env`), jadi tidak perlu diketik lagi. Uji otomatis dijalankan dulu; bila gagal, layanan yang sedang jalan tidak disentuh.
+
+Perintah berguna di server:
+
+| Perlu | Perintah |
+|---|---|
+| Status layanan | `sudo systemctl status zibbwash` |
+| Log langsung | `sudo journalctl -u zibbwash -f` |
+| Mulai ulang | `sudo systemctl restart zibbwash` |
+| Lupa kata sandi admin | Tambahkan `ADMIN_PASSWORD=sandibaru` dan `RESET_ADMIN_PASSWORD=1` ke `/etc/zibbwash.env`, restart, masuk, lalu **hapus kedua baris itu** dan restart lagi |
+| Data dan salinan | `/var/lib/zibbwash/db.json`, salinan harian 14 hari di `/var/backups/zibbwash` |
+
+Yang perlu diketahui:
+
+- **Instance idle.** Dokumen Oracle menyebut instance Always Free yang selama 7 hari CPU (persentil ke-95) dan jaringannya di bawah 20% dianggap idle dan "may be reclaimed". Website laundry yang sepi hampir pasti memenuhi itu. Dokumen tidak merinci tindakannya (berhenti atau dihapus) dan tidak menyatakan bahwa upgrade ke Pay As You Go membebaskan dari aturan ini. Kamu bisa upgrade (Oracle hanya menagih pemakaian di atas batas Always Free), tetapi anggap itu belum terjamin. Pegangan yang pasti: pantau `https://domainmu/healthz` dengan layanan pemantau gratis (misalnya UptimeRobot) agar kamu tahu kalau mati, unduh cadangan dari menu admin secara berkala, dan bila instance berhenti, jalankan lagi dari konsol Oracle (data di disk tetap ada).
+- **Satu server tanpa cadangan otomatis di luar server.** Salinan harian di server yang sama hanya melindungi dari data rusak. Unduhan dari menu admin yang melindungi dari server hilang.
+- Aplikasi hanya mendengarkan `127.0.0.1`; satu-satunya pintu masuk dari internet adalah Caddy di port 80 dan 443.
+- Kamu tidak perlu mengatur `TRUST_PROXY`. Skrip sudah mengisinya, sehingga batas percobaan login dihitung per pengunjung.
+
 ### Setelah online
 
 1. Masuk di tab **Admin** dengan username `admin`. Bila `ADMIN_PASSWORD` tidak diisi, kata sandi acak dicetak **sekali** di log deploy: cari kotak "AKUN ADMIN DIBUAT".
@@ -76,13 +125,14 @@ Gunakan wilayah server **Singapura** agar cepat dari Indonesia.
 | `TRUST_PROXY=1` | Hanya untuk VPS di belakang Nginx/Caddy: baca IP pengunjung dari `X-Forwarded-For` agar pembatas login dihitung per pengunjung |
 | `GOOGLE_MAPS_API_KEY` | API key Google Maps (menimpa yang diisi di halaman admin) |
 | `PORT` | Diatur otomatis oleh hosting |
+| `HOST` | Alamat yang didengarkan. Bawaan `0.0.0.0`. Di belakang Caddy/Nginx pada satu server, isi `127.0.0.1` agar aplikasi tidak terbuka langsung |
 
 ### Catatan penting
 
 - Jalankan **satu instance saja** (jangan menambah replika), karena seluruh data ada di satu berkas.
 - Kalau `TRUST_PROXY` tidak diset (default di Railway dan Render), pembatas login dihitung per akun, bukan per pengunjung. Tebakan kata sandi tetap dibatasi, tetapi orang iseng bisa mengunci login admin beberapa menit dengan percobaan salah berulang. Kata sandi admin yang kuat adalah perlindungan utamanya.
 - Memulihkan dari cadangan: letakkan berkas cadangan sebagai `db.json` di disk data, lalu mulai ulang server. Di VPS tinggal disalin. Di Railway atau Render lakukan lewat shell atau CLI penyedianya.
-- Di VPS: jalankan `NODE_ENV=production DATA_DIR=/var/lib/zibbwash TRUST_PROXY=1 node server.js` di belakang Nginx atau Caddy (untuk HTTPS), dan jaga proses tetap hidup dengan systemd atau pm2. Aplikasi sudah mengirim header `X-Accel-Buffering: no` agar Nginx tidak menahan pembaruan langsung; bila masih terasa tertunda, tambahkan `proxy_buffering off;` pada jalur `/api/events`.
+- Di VPS Ubuntu lain, `deploy/oracle-setup.sh` juga bisa dipakai apa adanya. Untuk pemasangan manual: jalankan `NODE_ENV=production HOST=127.0.0.1 DATA_DIR=/var/lib/zibbwash TRUST_PROXY=1 node server.js` di belakang Nginx atau Caddy (untuk HTTPS), dan jaga proses tetap hidup dengan systemd atau pm2. Aplikasi sudah mengirim header `X-Accel-Buffering: no` agar Nginx tidak menahan pembaruan langsung; bila masih terasa tertunda, tambahkan `proxy_buffering off;` pada jalur `/api/events`.
 
 ## Alur pemakaian
 
@@ -155,6 +205,7 @@ scripts/seed-demo.js data contoh
 test/api.test.js     uji alur lengkap lewat HTTP
 test/production.test.js  uji pemasangan online: kata sandi admin, SSE, cadangan, IP
 render.yaml          Blueprint untuk Render
+deploy/oracle-setup.sh  pasang/perbarui di server Ubuntu (Oracle Always Free): Node, systemd, Caddy, firewall
 data/db.json         "database" (dibuat otomatis, jangan di-commit)
 public/
   index.html         kerangka halaman
