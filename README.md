@@ -39,10 +39,24 @@ Selama server dijalankan di laptop, website hanya bisa dibuka saat laptop menyal
 | Render | Instance Starter $7/bulan + disk $0,25/GB/bulan | Ada `render.yaml`, pemasangan hampir otomatis |
 | Oracle Cloud Always Free | $0, tanpa batas waktu (butuh kartu untuk verifikasi) | Server virtual 24 jam dengan disk permanen. Lebih teknis dan ada risiko instance idle ditarik, lihat bagian Oracle di bawah |
 | Server virtual (VPS) | Sewa bulanan | Paling fleksibel, tetapi butuh langkah teknis sendiri (lihat catatan di bawah) |
-| Render gratis + Upstash | $0, tanpa kartu kredit | Data aman di Upstash. Layanan tidur setelah 15 menit sepi, pengunjung pertama menunggu hingga ±1 menit. Lihat bagian Render gratis di bawah |
+| Suga gratis + Upstash | $0, tanpa kartu kredit | Container menyala terus. Layanan masih early access dan sumber dayanya kecil (0,1 vCPU, 256 MiB). Ada `Dockerfile`. Lihat bagian Suga di bawah |
+| Render gratis + Upstash | $0, tetapi Render bisa meminta kartu | Data aman di Upstash. Layanan tidur setelah 15 menit sepi, pengunjung pertama menunggu hingga ±1 menit. Di sebagian akun (termasuk pemilik proyek ini) Render tetap meminta kartu walau instance Free dipilih |
 | Paket gratis tanpa Upstash | $0 | **Tidak cocok.** Data hilang tiap restart |
 
 Gunakan wilayah server **Singapura** agar cepat dari Indonesia.
+
+### Suga gratis + Upstash (tanpa kartu kredit, menyala terus)
+
+Suga menjalankan container yang menyala terus (tidak tidur seperti Render gratis). Paket gratisnya $0 tanpa kartu, dengan batas per layanan 0,1 vCPU, 256 MiB memori, dan 1 GB volume (cek suga.app/pricing, layanannya masih early access sehingga bisa berubah). Aplikasi ini cukup ringan untuk itu. Data utama tetap di Upstash, sama seperti di bagian Render di bawah.
+
+1. **Upstash:** langkah 1 di bagian Render di bawah (buat database Redis, salin `UPSTASH_REDIS_REST_URL` dan `UPSTASH_REDIS_REST_TOKEN`; bila dua nilai itu pernah terlihat orang lain, pilih **Reset Credentials** dulu).
+2. **Suga:** daftar di suga.app (lewat GitHub), buat project, lalu tambah layanan dengan **Service from GitHub**. Pasang GitHub App-nya, pilih repo `ZibbWash` dan cabang `main`.
+3. **Build method:** pilih **Dockerfile** (berkas `Dockerfile` ada di akar repo). Kalau build otomatis tanpa Dockerfile yang kamu pilih lalu gagal, ganti ke Dockerfile.
+4. **Port:** isi `3000` dan aktifkan **HTTPS** supaya bisa dibuka publik.
+5. **Environment variables** (tandai token dan kata sandi sebagai **Sensitive**): `NODE_ENV=production`, `ADMIN_PASSWORD` (kata sandi admin yang kuat, hanya dipakai saat akun admin pertama dibuat), `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
+6. **Deploy.** Suga memberi alamat HTTPS sendiri. Di log harus muncul "Upstash masih kosong: database baru dikirim" (pertama kali) atau "Database dipulihkan dari Upstash".
+
+Yang perlu diketahui: CPU 0,1 vCPU membuat login (hash kata sandi scrypt) terasa sedikit lebih lambat, dan layanan ini baru sehingga syaratnya bisa berubah. Domain sendiri di paket gratis belum kupastikan; alamat bawaan Suga tetap bisa dipakai. Setiap push ke `main` memicu build ulang otomatis, datamu aman karena ada di Upstash. `Dockerfile` ini belum pernah di-build di lingkungan pengembangan (tanpa Docker); model izinnya (pengguna non-root hanya menulis ke `data/`) sudah disimulasikan.
 
 ### Render gratis + Upstash (tanpa kartu kredit)
 
@@ -226,6 +240,7 @@ test/api.test.js     uji alur lengkap lewat HTTP
 test/production.test.js  uji pemasangan online: kata sandi admin, SSE, cadangan, IP
 test/remote.test.js  uji penyimpanan Upstash (dengan server Upstash tiruan)
 render.yaml          Blueprint Render gratis (data di Upstash)
+Dockerfile           image untuk hosting container (Suga dan sejenisnya)
 deploy/render.starter.yaml  Blueprint Render berbayar (disk permanen)
 deploy/oracle-setup.sh  pasang/perbarui di server Ubuntu (Oracle Always Free): Node, systemd, Caddy, firewall
 data/db.json         "database" (dibuat otomatis, jangan di-commit)
