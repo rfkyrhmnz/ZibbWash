@@ -248,3 +248,13 @@ test('fromEnv: kosong = nonaktif, setengah terisi = error, alamat tanpa skema di
   assert.equal(r.token, 't');
   assert.equal(r.keyDb, 'laundry:db');
 });
+
+test('fromEnv: toleran terhadap tempelan dari tab .env (tanda kutip, awalan NAMA=, spasi)', () => {
+  const a = RemoteStore.fromEnv({ UPSTASH_REDIS_REST_URL: '"https://abc.upstash.io"', UPSTASH_REDIS_REST_TOKEN: '"tokenku=="\n' });
+  assert.equal(a.url, 'https://abc.upstash.io');
+  assert.equal(a.token, 'tokenku==');
+  const b = RemoteStore.fromEnv({ UPSTASH_REDIS_REST_URL: 'UPSTASH_REDIS_REST_URL="https://abc.upstash.io/"', UPSTASH_REDIS_REST_TOKEN: " UPSTASH_REDIS_REST_TOKEN='rahasia' " });
+  assert.equal(b.url, 'https://abc.upstash.io');
+  assert.equal(b.token, 'rahasia');
+  assert.throws(() => RemoteStore.fromEnv({ UPSTASH_REDIS_REST_URL: '""', UPSTASH_REDIS_REST_TOKEN: 't' }), /harus diisi/);
+});
