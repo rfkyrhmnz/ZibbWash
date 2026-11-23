@@ -71,7 +71,7 @@ Tanpa konfigurasi apa pun, peta memakai **OpenStreetMap** (Leaflet, rute dari OS
 2. Batasi key ke domain websitemu (HTTP referrer).
 3. Tempel key di **Admin > Tarif dan pengaturan > Google Maps API Key**, atau jalankan dengan `GOOGLE_MAPS_API_KEY=... npm start`.
 
-Atur juga **latitude dan longitude outlet** di halaman yang sama. Titik itu menjadi dasar perhitungan jarak. Nilai awalnya hanya contoh di pusat kota Malang.
+Atur juga **latitude dan longitude outlet** di halaman yang sama. Titik itu menjadi dasar perhitungan jarak. Nilai awalnya sudah diisi titik outlet ZibbWash (-7,277005; 112,789758). Alamat tertulis outlet masih perlu diisi di halaman yang sama.
 
 Bila Google Maps gagal dimuat (key salah atau API belum aktif), aplikasi otomatis kembali ke OpenStreetMap.
 

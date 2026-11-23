@@ -74,7 +74,7 @@ history.forEach(([serviceId, kg], i) => {
 const o1 = place(rina, {
   serviceId: 'wash-iron', garments: [{ type: 'Kemeja / batik', qty: 6 }, { type: 'Celana jeans', qty: 3 }],
   estimatedWeight: 4, handover: 'pickup', returnMethod: 'delivery',
-  address: { text: 'Jl. Veteran No. 12, Lowokwaru, Malang (pagar hitam, sebelah toko buku)', lat: -7.9525, lng: 112.6137 },
+  address: { text: 'Jl. Contoh No. 12, Surabaya (pagar hitam, sebelah toko buku)', lat: -7.246905, lng: 112.772658 },
   notes: 'Tolong kemeja putih dipisah.',
 }, minutesAgo(5 * 60));
 L.setStatus(db, o1, 'pickup', 'Kurir menjemput di lokasi.', 'admin', minutesAgo(4.5 * 60));
@@ -91,7 +91,7 @@ place(rina, {
 const o3 = place(budi, {
   serviceId: 'regular', garments: [{ type: 'Pakaian harian', qty: 20 }, { type: 'Handuk', qty: 3 }],
   estimatedWeight: 8, handover: 'pickup', returnMethod: 'self',
-  address: { text: 'Jl. Kawi No. 8, Klojen, Malang', lat: -7.9878, lng: 112.6195 },
+  address: { text: 'Jl. Contoh No. 8, Surabaya', lat: -7.282205, lng: 112.778458 },
 }, minutesAgo(9 * 60));
 L.setStatus(db, o3, 'pickup', '', 'admin', minutesAgo(8 * 60));
 L.setWeight(db, o3, 8.6, 'admin', minutesAgo(7 * 60));

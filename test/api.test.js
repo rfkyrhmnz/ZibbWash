@@ -147,7 +147,7 @@ test('alur lengkap: pesan → timbang → tracking → bayar → selesai → sta
   const created = await cust('POST', '/api/orders', {
     serviceId: 'wash-fold', garments: [{ type: 'Pakaian harian', qty: 10 }, { type: 'Handuk', qty: 2 }],
     estimatedWeight: 4, handover: 'pickup', returnMethod: 'delivery', notes: '<b>hati-hati</b>',
-    address: { text: 'Jl. Contoh No. 1, Malang', lat: lat + 0.05, lng, distanceKm: 6.0 },
+    address: { text: 'Jl. Contoh No. 1, Surabaya', lat: lat + 0.05, lng, distanceKm: 6.0 },
   });
   assert.equal(created.status, 200, JSON.stringify(created.json));
   const o = created.json.order;
