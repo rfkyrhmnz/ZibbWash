@@ -1,0 +1,16 @@
+{
+  "name": "zibbwash-laundry",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Website ZibbWash Laundry: pemesanan, tracking, pembayaran simulasi, dan kartu stamp. Tanpa dependensi eksternal.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node scripts/seed-demo.js",
+    "test": "node --test test/api.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
