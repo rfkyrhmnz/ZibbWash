@@ -1,0 +1,24 @@
+# Blueprint Render: pasang ZibbWash online dari repo ini (Render > New > Blueprint > pilih repo).
+# Perlu instance berbayar: disk permanen (tempat db.json disimpan) tidak tersedia di paket gratis,
+# dan paket gratis mati setelah 15 menit sepi sehingga pelanggan harus menunggu ±1 menit.
+# Biaya: Starter $7/bulan + disk $0,25/GB/bulan (cek render.com/pricing untuk harga terbaru).
+services:
+  - type: web
+    name: zibbwash
+    runtime: node
+    plan: starter
+    region: singapore        # terdekat dari Indonesia; tidak bisa diubah setelah dibuat
+    buildCommand: npm install # proyek tanpa dependensi, jadi ini hanya formalitas
+    startCommand: npm start
+    healthCheckPath: /healthz
+    disk:
+      name: zibbwash-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR        # db.json disimpan di disk permanen di atas
+        value: /var/data
+      - key: ADMIN_PASSWORD  # diisi di dashboard Render saat Blueprint dibuat (tidak disimpan di repo)
+        sync: false

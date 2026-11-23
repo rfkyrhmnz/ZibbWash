@@ -5,6 +5,7 @@ import {
   statusChip, payChip,
 } from '../util.js';
 import { state, onCleanup, go } from '../state.js';
+import { onOrdersChanged } from '../realtime.js';
 import { billHtml, detailsHtml, activityHtml, emptyState, skeleton } from './shared.js';
 
 // Filter dan pencarian diingat selama sesi agar tidak hilang saat berpindah pesanan.
@@ -212,7 +213,29 @@ export async function orders({ container, params }) {
   drawStats(); drawFilters(); drawList();
   await showDetail(selectedId);
 
-  // Daftar disegarkan tiap 20 detik agar pesanan baru langsung muncul (detail tidak ikut diganti agar isian tidak hilang).
+  // Isian di panel detail yang sudah diubah tetapi belum disimpan tidak boleh tertimpa pembaruan otomatis.
+  const detailDirty = () => [...$('#detail', root).querySelectorAll('input, textarea, select')].some((el) => {
+    if (el.type === 'checkbox' || el.type === 'radio') return el.checked !== el.defaultChecked;
+    if (el.tagName === 'SELECT') return [...el.options].some((o) => o.selected !== o.defaultSelected);
+    return el.value !== el.defaultValue;
+  });
+
+  // Pembaruan langsung dari server: daftar dan statistik selalu disegarkan; panel detail hanya bila pesanan itu
+  // yang berubah dan tidak ada isian yang sedang diketik.
+  const stopLive = onOrdersChanged(async ({ ids, resync }) => {
+    if (document.querySelector('dialog[open]')) return;
+    try {
+      const before = list.length;
+      await refreshAll();
+      if (list.length > before) toast(`${list.length - before} pesanan baru masuk.`, 'info');
+      if (selectedId && (resync || ids.has(selectedId))) {
+        if (detailDirty()) toast('Pesanan ini baru saja berubah. Simpan atau kosongkan isianmu, lalu buka ulang pesanannya.', 'info');
+        else await showDetail(selectedId, { quiet: true });
+      }
+    } catch { /* abaikan, putaran berikutnya akan mencoba lagi */ }
+  });
+
+  // Cadangan bila sambungan langsung tidak tersedia: segarkan daftar tiap 60 detik.
   const timer = setInterval(async () => {
     if (document.hidden || document.querySelector('dialog[open]')) return;
     try {
@@ -220,8 +243,8 @@ export async function orders({ container, params }) {
       await refreshAll();
       if (list.length > before) toast(`${list.length - before} pesanan baru masuk.`, 'info');
     } catch { /* abaikan */ }
-  }, 20000);
-  onCleanup(() => clearInterval(timer));
+  }, 60000);
+  onCleanup(() => { clearInterval(timer); stopLive(); });
 }
 
 // ───────────────────────── pelanggan ─────────────────────────
@@ -314,6 +337,13 @@ export async function settings({ container }) {
 
         <div class="save-bar"><button class="btn btn-primary btn-lg">Simpan perubahan</button></div>
       </form>
+      <div class="settings backup-wrap">
+        <section class="panel">
+          <h2>Cadangan data</h2>
+          <p class="hint">Unduh seluruh data (pesanan, pelanggan, tarif) sebagai satu berkas. Isinya data pribadi pelanggan, jadi simpan di tempat yang aman. Disarankan mengunduh tiap minggu.</p>
+          <a class="btn btn-ghost" href="/api/admin/backup" download>${icon('box', 18)}Unduh cadangan data</a>
+        </section>
+      </div>
     </div>`);
 
   const form = $('#set-form', container);

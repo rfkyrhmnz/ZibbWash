@@ -7,7 +7,7 @@ Website laundry kiloan dengan dua peran (admin dan pelanggan): pemesanan dengan 
 Syarat: [Node.js](https://nodejs.org) versi 18 atau lebih baru.
 
 ```bash
-cd zibbwash-laundry
+cd ZibbWash
 npm start                  # buka http://localhost:3000
 ```
 
@@ -29,11 +29,66 @@ npm run seed -- --force    # menimpa db.json yang ada
 Kata sandi awal admin bisa ditentukan saat database pertama dibuat: `ADMIN_PASSWORD=rahasiaku npm start`.
 Port bisa diubah dengan `PORT=8080 npm start`.
 
+## Memasang online (agar bisa dibuka dari HP dan komputer)
+
+Selama server dijalankan di laptop, website hanya bisa dibuka saat laptop menyala dan terhubung. Supaya bisa diakses kapan saja dari perangkat apa pun, pasang di hosting. Syarat utamanya: hosting harus punya **disk permanen**, karena database-nya berupa berkas `db.json`. Hosting gratis menghapus berkas lokal setiap restart atau deploy ulang, sehingga semua pesanan ikut hilang.
+
+| Pilihan | Biaya (per November 2026, cek halaman harga masing-masing) | Catatan |
+|---|---|---|
+| Railway | Paket Hobby $5/bulan (sudah termasuk pemakaian $5) + volume $0,15/GB/bulan | Langkah paling singkat, tanpa berkas konfigurasi |
+| Render | Instance Starter $7/bulan + disk $0,25/GB/bulan | Ada `render.yaml`, pemasangan hampir otomatis |
+| Server virtual (VPS) | Sewa bulanan | Paling fleksibel, tetapi butuh langkah teknis sendiri (lihat catatan di bawah) |
+| Paket gratis | $0 | **Tidak cocok.** Di Render gratis, layanan mati setelah 15 menit sepi (pelanggan menunggu ±1 menit) dan data hilang tiap restart |
+
+Gunakan wilayah server **Singapura** agar cepat dari Indonesia.
+
+### Railway
+
+1. Daftar di railway.com dan hubungkan akun GitHub.
+2. **New Project**, **Deploy from GitHub repo**, lalu pilih repo `ZibbWash`.
+3. Buka service, **Settings**, lalu pilih wilayah **Southeast Asia (Singapore)**. Lakukan ini sebelum membuat volume, karena memindahkan wilayah setelah ada volume membuat volumenya harus dimigrasi.
+4. Tambahkan **Volume** dengan mount path `/data`. Railway otomatis menyediakan variabel `RAILWAY_VOLUME_MOUNT_PATH` dan aplikasi memakainya, jadi lokasi data tidak perlu diatur lagi.
+5. Di **Variables**, isi `NODE_ENV` = `production` dan `ADMIN_PASSWORD` = kata sandi admin yang kuat.
+6. Di **Settings > Networking**, klik **Generate Domain**, lalu buka alamatnya.
+
+### Render
+
+1. Daftar di render.com dan hubungkan akun GitHub.
+2. **New**, **Blueprint**, lalu pilih repo `ZibbWash`. Render membaca `render.yaml` (wilayah Singapura, disk 1 GB, health check).
+3. Saat diminta `ADMIN_PASSWORD`, isi kata sandi admin yang kuat, lalu **Apply**.
+4. Tunggu deploy selesai, lalu buka alamat `https://zibbwash-xxxx.onrender.com`.
+
+### Setelah online
+
+1. Masuk di tab **Admin** dengan username `admin`. Bila `ADMIN_PASSWORD` tidak diisi, kata sandi acak dicetak **sekali** di log deploy: cari kotak "AKUN ADMIN DIBUAT".
+2. Ganti kata sandi lewat menu **Ganti kata sandi**, isi alamat outlet di **Tarif & pengaturan**, dan cek tarifnya. Bila memakai Google Maps, batasi API key ke alamat website di Google Cloud.
+3. Uji dari HP: pesan sebagai pelanggan, ubah statusnya dari admin di komputer, dan lihat perubahannya muncul seketika.
+4. Unduh cadangan secara berkala di **Tarif & pengaturan > Cadangan data**.
+
+### Variabel lingkungan
+
+| Variabel | Fungsi |
+|---|---|
+| `NODE_ENV=production` | Mode produksi: kata sandi admin awal dibuat acak bila `ADMIN_PASSWORD` kosong, dan peringatan keamanan muncul di log |
+| `ADMIN_PASSWORD` | Kata sandi admin awal (hanya dipakai saat akun admin pertama kali dibuat) |
+| `RESET_ADMIN_PASSWORD=1` | Paksa kata sandi admin menjadi `ADMIN_PASSWORD` saat server start. Dipakai bila lupa kata sandi: set keduanya, deploy ulang, masuk, lalu **hapus** `RESET_ADMIN_PASSWORD` |
+| `DATA_DIR` atau `DB_FILE` | Lokasi database. Arahkan ke disk permanen. Di Railway otomatis memakai volume |
+| `TRUST_PROXY=1` | Hanya untuk VPS di belakang Nginx/Caddy: baca IP pengunjung dari `X-Forwarded-For` agar pembatas login dihitung per pengunjung |
+| `GOOGLE_MAPS_API_KEY` | API key Google Maps (menimpa yang diisi di halaman admin) |
+| `PORT` | Diatur otomatis oleh hosting |
+
+### Catatan penting
+
+- Jalankan **satu instance saja** (jangan menambah replika), karena seluruh data ada di satu berkas.
+- Kalau `TRUST_PROXY` tidak diset (default di Railway dan Render), pembatas login dihitung per akun, bukan per pengunjung. Tebakan kata sandi tetap dibatasi, tetapi orang iseng bisa mengunci login admin beberapa menit dengan percobaan salah berulang. Kata sandi admin yang kuat adalah perlindungan utamanya.
+- Memulihkan dari cadangan: letakkan berkas cadangan sebagai `db.json` di disk data, lalu mulai ulang server. Di VPS tinggal disalin. Di Railway atau Render lakukan lewat shell atau CLI penyedianya.
+- Di VPS: jalankan `NODE_ENV=production DATA_DIR=/var/lib/zibbwash TRUST_PROXY=1 node server.js` di belakang Nginx atau Caddy (untuk HTTPS), dan jaga proses tetap hidup dengan systemd atau pm2. Aplikasi sudah mengirim header `X-Accel-Buffering: no` agar Nginx tidak menahan pembaruan langsung; bila masih terasa tertunda, tambahkan `proxy_buffering off;` pada jalur `/api/events`.
+
 ## Alur pemakaian
 
 1. **Pelanggan** daftar atau masuk di tab *Pelanggan*, lalu memilih layanan, jenis pakaian, cara serah terima, dan lokasi di peta. Ongkir dan perkiraan total muncul langsung.
 2. **Admin** masuk di tab *Admin*, membuka pesanan yang masuk, memasukkan **berat aktual** (tagihan final dibuat), lalu memperbarui status: dicuci, dikeringkan, dilipat atau disetrika, siap, dan seterusnya.
-3. **Pelanggan** memantau status (halaman diperbarui otomatis tiap 15 detik), membayar lewat tombol simulasi, dan mengumpulkan stamp.
+3. **Pelanggan** memantau status, membayar lewat tombol simulasi, dan mengumpulkan stamp. Setiap perubahan dari admin langsung muncul di layar pelanggan, dan pesanan baru langsung muncul di daftar admin, tanpa muat ulang halaman (pembaruan langsung lewat Server-Sent Events).
 
 Alur status mengikuti pilihan pelanggan:
 
@@ -98,11 +153,13 @@ lib/
   store.js           database JSON (baca/tulis atomik) + pengaturan bawaan
 scripts/seed-demo.js data contoh
 test/api.test.js     uji alur lengkap lewat HTTP
+test/production.test.js  uji pemasangan online: kata sandi admin, SSE, cadangan, IP
+render.yaml          Blueprint untuk Render
 data/db.json         "database" (dibuat otomatis, jangan di-commit)
 public/
   index.html         kerangka halaman
   css/style.css      gaya visual (palet dari logo)
-  js/                router, API client, peta, dan tampilan
+  js/                router, API client, peta, pembaruan langsung (realtime.js), dan tampilan
   js/views/          landing, login, area pelanggan, area admin
   img/               logo
 ```
@@ -111,11 +168,13 @@ Isi `data/db.json`: `settings`, `users`, `sessions`, `orders`. Kata sandi disimp
 
 ## API ringkas
 
-Publik: `GET /api/config`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
+Publik: `GET /healthz`, `GET /api/config`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
+
+Pembaruan langsung (perlu login): `GET /api/events` (Server-Sent Events; server hanya mengirim ID pesanan yang berubah, admin menerima semua, pelanggan hanya pesanannya sendiri)
 
 Pelanggan: `POST /api/quote`, `GET|POST /api/orders`, `GET /api/orders/:id`, `POST /api/orders/:id/cancel`, `POST /api/orders/:id/pay`, `GET /api/loyalty`
 
-Admin: `GET /api/admin/stats`, `GET /api/admin/orders`, `GET /api/admin/orders/:id`, `POST /api/admin/orders/:id/{weight|status|payment|cancel}`, `GET /api/admin/customers`, `GET|PUT /api/admin/settings`
+Admin: `GET /api/admin/stats`, `GET /api/admin/orders`, `GET /api/admin/orders/:id`, `POST /api/admin/orders/:id/{weight|status|payment|cancel}`, `GET /api/admin/customers`, `GET|PUT /api/admin/settings`, `GET /api/admin/backup`
 
 Semua endpoint selain publik menolak tamu (401), dan endpoint admin menolak pelanggan (403).
 
@@ -125,11 +184,11 @@ Semua endpoint selain publik menolak tamu (401), dan endpoint admin menolak pela
 npm test
 ```
 
-12 skenario black box lewat HTTP, memakai database sementara (data asli tidak tersentuh): kontrol akses per peran, validasi form, hitung ongkir, alur pesan sampai stamp, voucher, pembatalan, pengaturan tarif, dan keamanan dasar (JSON rusak, path traversal, pembatas login).
+24 skenario black box lewat HTTP, memakai database sementara (data asli tidak tersentuh): kontrol akses per peran, validasi form, hitung ongkir, alur pesan sampai stamp, voucher, pembatalan, pengaturan tarif, keamanan dasar (JSON rusak, path traversal, pembatas login), serta untuk pemasangan online: kata sandi admin acak, urutan lokasi database, pembaca IP di balik proxy (termasuk upaya memalsukan header), pembaruan langsung hanya ke yang berhak, dan cadangan data.
 
 ## Catatan sebelum dipakai sungguhan
 
 - **Pembayaran hanya simulasi.** Tombol bayar mengubah status menjadi lunas tanpa memindahkan uang. Untuk pembayaran nyata, perlu integrasi payment gateway.
-- Database JSON cocok untuk demo dan beban kecil. Bila pesanan sudah banyak, pindahkan ke SQLite atau PostgreSQL. Seluruh akses data lewat `lib/store.js` dan `lib/logic.js`.
-- Ganti kata sandi admin bawaan, dan pasang di belakang HTTPS (cookie sesi otomatis diberi `Secure` bila memakai HTTPS lewat proxy yang mengirim `X-Forwarded-Proto`).
+- Database JSON cocok untuk satu outlet dengan beban kecil. Seluruh data dimuat di memori dan ditulis ulang utuh tiap perubahan, jadi hanya satu server yang boleh berjalan. Bila pesanan sudah ribuan atau butuh beberapa server, pindahkan ke SQLite atau PostgreSQL. Seluruh akses data lewat `lib/store.js` dan `lib/logic.js`.
+- Ganti kata sandi admin bawaan (`admin123` hanya untuk percobaan di laptop; di mode produksi kata sandi dibuat acak), dan pasang di belakang HTTPS. Cookie sesi otomatis diberi `Secure` bila proxy mengirim `X-Forwarded-Proto: https`, yang dilakukan Railway dan Render.
 - Font (Google Fonts) dan peta (CDN) dimuat dari internet. Tanpa koneksi, tampilan memakai font cadangan dan peta tidak muncul.

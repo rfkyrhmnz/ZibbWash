@@ -5,6 +5,7 @@ import {
   statusChip, payChip, serviceIcon, waLink, HANDOVER, RETURN,
 } from '../util.js';
 import { state, onCleanup, go, updateUser } from '../state.js';
+import { onOrdersChanged } from '../realtime.js';
 import { createMapPicker } from '../maps.js';
 import { billHtml, detailsHtml, activityHtml, pipBar, emptyState, skeleton } from './shared.js';
 
@@ -40,57 +41,76 @@ function orderRow(o, { progress = false } = {}) {
 // ───────────────────────── beranda ─────────────────────────
 export async function dashboard({ container }) {
   mount(container, html`<div class="page">${skeleton()}</div>`);
-  const [{ orders }, loy] = await Promise.all([get('/api/orders'), get('/api/loyalty')]);
-  updateUser(loy.user);
-  const need = state.config.loyalty.stampsForReward;
-  const active = orders.filter(isActive);
-  const past = orders.filter((o) => !isActive(o)).slice(0, 4);
-  const unpaid = active.filter((o) => o.billing.isFinal && o.payment.status === 'unpaid');
-  const first = loy.user.name.split(' ')[0];
+  let alive = true;
 
-  mount(container, html`
-    <div class="page">
-      <header class="page-head">
-        <div><h1>Halo, ${first}</h1><p>${active.length ? `${active.length} pesanan sedang berjalan.` : 'Belum ada pesanan yang berjalan.'}</p></div>
-        <a class="btn btn-primary" href="#/app/pesan">${icon('plus', 18)}Pesan laundry</a>
-      </header>
-      ${unpaid.length ? html`
-        <a class="notice notice-wait" href="#/app/pesanan/${unpaid[0].id}">
-          ${icon('card', 20)}<span><b>${unpaid.length === 1 ? 'Satu tagihan menunggu pembayaran.' : `${unpaid.length} tagihan menunggu pembayaran.`}</b> ${unpaid[0].id}: ${rupiah(unpaid[0].billing.total)}</span>${icon('chev', 18)}
-        </a>` : ''}
-      <div class="dash-grid">
-        <section>
-          <h2 class="h-sec">Pesanan aktif</h2>
-          ${active.length
-            ? html`<div class="olist">${active.map((o) => orderRow(o, { progress: true }))}</div>`
-            : emptyState('Belum ada cucian berjalan', 'Pesan sekarang, lalu pantau setiap tahapnya dari sini.', html`<a class="btn btn-primary" href="#/app/pesan">Pesan laundry</a>`)}
-        </section>
-        <aside class="dash-side">
-          ${stampCard({ stamps: loy.user.stamps, need, vouchers: loy.user.vouchers })}
-          <a class="link-row" href="#/app/stamp">Lihat aturan dan riwayat stamp${icon('chev', 18)}</a>
-        </aside>
-      </div>
-      ${past.length ? html`
-        <section class="page-sec">
-          <div class="sec-head"><h2 class="h-sec">Riwayat terakhir</h2><a class="link" href="#/app/pesanan">Lihat semua</a></div>
-          <div class="olist">${past.map((o) => orderRow(o))}</div>
-        </section>` : ''}
-    </div>`);
+  async function load() {
+    const [{ orders }, loy] = await Promise.all([get('/api/orders'), get('/api/loyalty')]);
+    if (!alive) return;
+    updateUser(loy.user);
+    const need = state.config.loyalty.stampsForReward;
+    const active = orders.filter(isActive);
+    const past = orders.filter((o) => !isActive(o)).slice(0, 4);
+    const unpaid = active.filter((o) => o.billing.isFinal && o.payment.status === 'unpaid');
+    const first = loy.user.name.split(' ')[0];
+
+    mount(container, html`
+      <div class="page">
+        <header class="page-head">
+          <div><h1>Halo, ${first}</h1><p>${active.length ? `${active.length} pesanan sedang berjalan.` : 'Belum ada pesanan yang berjalan.'}</p></div>
+          <a class="btn btn-primary" href="#/app/pesan">${icon('plus', 18)}Pesan laundry</a>
+        </header>
+        ${unpaid.length ? html`
+          <a class="notice notice-wait" href="#/app/pesanan/${unpaid[0].id}">
+            ${icon('card', 20)}<span><b>${unpaid.length === 1 ? 'Satu tagihan menunggu pembayaran.' : `${unpaid.length} tagihan menunggu pembayaran.`}</b> ${unpaid[0].id}: ${rupiah(unpaid[0].billing.total)}</span>${icon('chev', 18)}
+          </a>` : ''}
+        <div class="dash-grid">
+          <section>
+            <h2 class="h-sec">Pesanan aktif</h2>
+            ${active.length
+              ? html`<div class="olist">${active.map((o) => orderRow(o, { progress: true }))}</div>`
+              : emptyState('Belum ada cucian berjalan', 'Pesan sekarang, lalu pantau setiap tahapnya dari sini.', html`<a class="btn btn-primary" href="#/app/pesan">Pesan laundry</a>`)}
+          </section>
+          <aside class="dash-side">
+            ${stampCard({ stamps: loy.user.stamps, need, vouchers: loy.user.vouchers })}
+            <a class="link-row" href="#/app/stamp">Lihat aturan dan riwayat stamp${icon('chev', 18)}</a>
+          </aside>
+        </div>
+        ${past.length ? html`
+          <section class="page-sec">
+            <div class="sec-head"><h2 class="h-sec">Riwayat terakhir</h2><a class="link" href="#/app/pesanan">Lihat semua</a></div>
+            <div class="olist">${past.map((o) => orderRow(o))}</div>
+          </section>` : ''}
+      </div>`);
+  }
+
+  await load();
+  // Status dari admin langsung terlihat tanpa memuat ulang halaman.
+  const stopLive = onOrdersChanged(() => { if (!document.querySelector('dialog[open]')) load().catch(() => {}); });
+  onCleanup(() => { alive = false; stopLive(); });
 }
 
 // ───────────────────────── daftar pesanan ─────────────────────────
 export async function orders({ container }) {
   mount(container, html`<div class="page">${skeleton()}</div>`);
-  const { orders: list } = await get('/api/orders');
-  const active = list.filter(isActive);
-  const past = list.filter((o) => !isActive(o));
-  mount(container, html`
-    <div class="page">
-      <header class="page-head"><div><h1>Pesanan saya</h1><p>${list.length} pesanan sejak bergabung.</p></div><a class="btn btn-primary" href="#/app/pesan">${icon('plus', 18)}Pesan laundry</a></header>
-      ${list.length === 0 ? emptyState('Belum ada pesanan', 'Pesanan pertamamu akan muncul di sini lengkap dengan status pengerjaannya.', html`<a class="btn btn-primary" href="#/app/pesan">Buat pesanan pertama</a>`) : ''}
-      ${active.length ? html`<section class="page-sec"><h2 class="h-sec">Berjalan</h2><div class="olist">${active.map((o) => orderRow(o, { progress: true }))}</div></section>` : ''}
-      ${past.length ? html`<section class="page-sec"><h2 class="h-sec">Selesai dan dibatalkan</h2><div class="olist">${past.map((o) => orderRow(o))}</div></section>` : ''}
-    </div>`);
+  let alive = true;
+
+  async function load() {
+    const { orders: list } = await get('/api/orders');
+    if (!alive) return;
+    const active = list.filter(isActive);
+    const past = list.filter((o) => !isActive(o));
+    mount(container, html`
+      <div class="page">
+        <header class="page-head"><div><h1>Pesanan saya</h1><p>${list.length} pesanan sejak bergabung.</p></div><a class="btn btn-primary" href="#/app/pesan">${icon('plus', 18)}Pesan laundry</a></header>
+        ${list.length === 0 ? emptyState('Belum ada pesanan', 'Pesanan pertamamu akan muncul di sini lengkap dengan status pengerjaannya.', html`<a class="btn btn-primary" href="#/app/pesan">Buat pesanan pertama</a>`) : ''}
+        ${active.length ? html`<section class="page-sec"><h2 class="h-sec">Berjalan</h2><div class="olist">${active.map((o) => orderRow(o, { progress: true }))}</div></section>` : ''}
+        ${past.length ? html`<section class="page-sec"><h2 class="h-sec">Selesai dan dibatalkan</h2><div class="olist">${past.map((o) => orderRow(o))}</div></section>` : ''}
+      </div>`);
+  }
+
+  await load();
+  const stopLive = onOrdersChanged(() => { load().catch(() => {}); });
+  onCleanup(() => { alive = false; stopLive(); });
 }
 
 // ───────────────────────── form pesan ─────────────────────────
@@ -532,9 +552,9 @@ export async function tracking({ container, params }) {
 
   draw();
 
-  // Perbarui otomatis tiap 15 detik agar status terbaru dari admin langsung terlihat.
-  const timer = setInterval(async () => {
-    if (!alive || document.hidden || document.querySelector('dialog[open]')) return;
+  // Ambil status terbaru; dipanggil saat server memberi kabar (langsung) dan oleh polling cadangan tiap 60 detik.
+  async function refresh() {
+    if (!alive || document.querySelector('dialog[open]')) return;
     try {
       const fresh = (await get(`/api/orders/${encodeURIComponent(id)}`)).order;
       if (alive && fresh.updatedAt !== order.updatedAt) {
@@ -542,9 +562,11 @@ export async function tracking({ container, params }) {
         toast(`Status diperbarui: ${fresh.statusLabel}.`, 'info');
         const me = await get('/api/auth/me'); if (me.user) updateUser(me.user);
       }
-    } catch { /* coba lagi pada putaran berikutnya */ }
-  }, 15000);
-  onCleanup(() => clearInterval(timer));
+    } catch { /* coba lagi pada pemberitahuan atau putaran berikutnya */ }
+  }
+  const stopLive = onOrdersChanged(({ ids, resync }) => { if (resync || ids.has(id)) refresh(); });
+  const timer = setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+  onCleanup(() => { clearInterval(timer); stopLive(); });
 }
 
 // ───────────────────────── kartu stamp ─────────────────────────

@@ -2,6 +2,7 @@
 import { get, post, ApiError } from './api.js';
 import { html, mount, $, $$, on, icon, toast, openModal, showFieldErrors, initials } from './util.js';
 import { state, runCleanups, go, homeFor } from './state.js';
+import { startRealtime, stopRealtime } from './realtime.js';
 import { landingView } from './views/landing.js';
 import { authView } from './views/auth.js';
 import * as customer from './views/customer.js';
@@ -122,6 +123,7 @@ function refreshStampPill() {
 // ───────── router ─────────
 async function renderRoute() {
   runCleanups();
+  if (state.user) startRealtime(); else stopRealtime();
   const { path, query } = parseHash();
   const r = routes.find((x) => x.re.test(path));
   if (!r) { go('/'); return; }
@@ -150,6 +152,7 @@ async function renderRoute() {
 
 // ───────── aksi global (menu akun) ─────────
 async function logout() {
+  stopRealtime();
   try { await post('/api/auth/logout'); } catch { /* sesi mungkin sudah habis */ }
   state.user = null; currentShell = null;
   toast('Kamu sudah keluar.', 'ok');

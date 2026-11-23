@@ -574,6 +574,8 @@ li:first-child > .board-row { border-top: 1px solid var(--line); }
 .mini-stamps i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
 .mini-stamps i.on { background: var(--lagoon); }
 .settings { display: grid; gap: 18px; max-width: 880px; }
+.backup-wrap { margin-top: 18px; }
+.backup-wrap .hint { margin-bottom: 14px; max-width: 62ch; }
 .svc-edit { display: grid; gap: 14px; }
 .svc-edit-row { display: grid; grid-template-columns: 150px 220px minmax(0, 1fr); gap: 14px; align-items: end; padding-bottom: 14px; border-bottom: 1px solid var(--line-2); }
 .svc-edit-row:last-child { border-bottom: 0; padding-bottom: 0; }

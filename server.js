@@ -2,15 +2,21 @@
 /**
  * ZibbWash Laundry: server HTTP + API (Node.js murni, tanpa dependensi).
  *   node server.js            → http://localhost:3000
- * Variabel lingkungan opsional: PORT, HOST, DB_FILE, ADMIN_PASSWORD (hanya saat database pertama dibuat),
- * GOOGLE_MAPS_API_KEY (menimpa kunci yang diisi di Admin > Tarif & pengaturan).
+ * Variabel lingkungan opsional:
+ *   PORT, HOST
+ *   DB_FILE | DATA_DIR            lokasi database (di hosting: arahkan ke disk/volume permanen)
+ *   NODE_ENV=production           kata sandi admin awal dibuat acak bila ADMIN_PASSWORD kosong
+ *   ADMIN_PASSWORD                kata sandi admin awal (hanya saat database pertama dibuat)
+ *   RESET_ADMIN_PASSWORD=1        paksa kata sandi admin = ADMIN_PASSWORD saat start (lupa kata sandi)
+ *   TRUST_PROXY=1                 percayai 1 lapis proxy untuk membaca IP asli (X-Forwarded-For), default mati
+ *   GOOGLE_MAPS_API_KEY           menimpa kunci yang diisi di Admin > Tarif & pengaturan
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
-const { Store } = require('./lib/store');
+const { Store, resolveDbFile } = require('./lib/store');
 const auth = require('./lib/auth');
 const L = require('./lib/logic');
 
@@ -33,10 +39,44 @@ function presentUser(u) {
 
 function createApp(opts = {}) {
   const publicDir = opts.publicDir || path.join(__dirname, 'public');
-  const dbFile = opts.dbFile || process.env.DB_FILE || path.join(__dirname, 'data', 'db.json');
-  const store = new Store(dbFile, { adminPassword: opts.adminPassword || process.env.ADMIN_PASSWORD || 'admin123' });
+  const production = opts.production !== undefined ? !!opts.production : process.env.NODE_ENV === 'production';
+  const dbLocation = opts.dbFile ? { file: opts.dbFile, persistent: true } : resolveDbFile();
+  const store = new Store(dbLocation.file, { adminPassword: opts.adminPassword || process.env.ADMIN_PASSWORD || null, production });
   const loginLimiter = new auth.RateLimiter(8, 5 * 60 * 1000);
   const routes = [];
+
+  // Di balik proxy hosting, alamat socket adalah milik proxy. Hanya bila TRUST_PROXY=n diset (n = jumlah proxy
+  // tepercaya di depan server), IP klien dibaca dari entri ke-n dari kanan di X-Forwarded-For.
+  // Default mati karena header itu bisa dipalsukan bila server tidak benar-benar berada di belakang proxy.
+  const trustProxy = (() => {
+    if (opts.trustProxy !== undefined) return Number(opts.trustProxy) || 0;
+    const raw = String(process.env.TRUST_PROXY || '');
+    return /^(true|yes|on)$/i.test(raw) ? 1 : Number(raw) || 0;
+  })();
+  function clientIp(req) {
+    const peer = req.socket.remoteAddress || 'unknown';
+    if (!trustProxy) return peer;
+    const hops = String(req.headers['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean);
+    return hops.length >= trustProxy ? hops[hops.length - trustProxy] : peer;
+  }
+
+  // Pembaruan langsung lewat Server-Sent Events: server hanya memberi tahu "pesanan X berubah"; klien lalu
+  // mengambil datanya lewat endpoint biasa, jadi hak akses tetap diperiksa seperti biasa dan tidak ada data bocor.
+  const STREAM = Symbol('stream');
+  const live = new Set(); // { res, userId, role, token }
+  const MAX_LIVE_PER_USER = 4;
+  const MAX_LIVE_TOTAL = 500;
+  function liveSend(c, chunk) { try { c.res.write(chunk); } catch { live.delete(c); } }
+  function liveClose(match) {
+    for (const c of [...live]) if (match(c)) { live.delete(c); try { c.res.end(); } catch { /* sudah putus */ } }
+  }
+  function publish(type, orderId, userId) {
+    const msg = `event: ${type}\ndata: ${JSON.stringify({ id: orderId })}\n\n`;
+    for (const c of live) if (c.role === 'admin' || (userId && c.userId === userId)) liveSend(c, msg);
+  }
+  // Komentar berkala menjaga koneksi tetap hidup melewati proxy yang memutus koneksi sepi.
+  const heartbeat = setInterval(() => { for (const c of live) liveSend(c, ': ping\n\n'); }, 25000);
+  heartbeat.unref();
 
   function route(method, pattern, access, handler) {
     const keys = [];
@@ -97,7 +137,7 @@ function createApp(opts = {}) {
     const role = ctx.body.role === 'admin' ? 'admin' : 'customer';
     const identifier = L.cleanStr(ctx.body.identifier, 60);
     const password = String(ctx.body.password || '');
-    const key = `${ctx.req.socket.remoteAddress}|${role}|${identifier.toLowerCase()}`;
+    const key = `${clientIp(ctx.req)}|${role}|${identifier.toLowerCase()}`;
     const lim = loginLimiter.check(key);
     if (lim.limited) throw new HttpError(429, `Terlalu banyak percobaan. Coba lagi dalam ${Math.ceil(lim.retryAfterSec / 60)} menit.`);
     const fail = role === 'admin' ? 'Username atau kata sandi salah.' : 'Nomor HP atau kata sandi salah.';
@@ -115,8 +155,30 @@ function createApp(opts = {}) {
 
   route('POST', '/api/auth/logout', null, (ctx) => {
     auth.destroySession(db(), ctx.token);
+    liveClose((c) => c.token === ctx.token);
     ctx.res.setHeader('Set-Cookie', 'zw_sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
     return { ok: true };
+  });
+
+  // Aliran pembaruan langsung. Klien (EventSource) tersambung ulang otomatis bila terputus.
+  route('GET', '/api/events', 'any', (ctx) => {
+    if (live.size >= MAX_LIVE_TOTAL) throw new HttpError(503, 'Server sedang ramai. Coba lagi sebentar lagi.');
+    const mine = [...live].filter((c) => c.userId === ctx.user.id);
+    while (mine.length >= MAX_LIVE_PER_USER) { const oldest = mine.shift(); liveClose((c) => c === oldest); }
+    const { req, res } = ctx;
+    req.socket.setNoDelay(true);
+    req.socket.setKeepAlive(true);
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 3000\n\nevent: hello\ndata: {}\n\n');
+    const client = { res, userId: ctx.user.id, role: ctx.user.role, token: ctx.token };
+    live.add(client);
+    res.on('close', () => live.delete(client)); // pada Node ≥16 hanya 'close' milik res yang menandai koneksi putus
+    return STREAM;
   });
 
   route('GET', '/api/auth/me', null, (ctx) => ({ user: presentUser(ctx.user) }));
@@ -131,6 +193,7 @@ function createApp(opts = {}) {
     if (next.length < 6 || next.length > 100) throw new HttpError(422, 'Kata sandi baru minimal 6 karakter.', { next: 'Minimal 6 karakter.' });
     Object.assign(u, auth.hashPassword(next));
     auth.destroyUserSessions(db(), u.id, ctx.token);
+    liveClose((c) => c.userId === u.id && c.token !== ctx.token);
     return { ok: true };
   });
 
@@ -237,6 +300,15 @@ function createApp(opts = {}) {
       return { id: u.id, name: u.name, phone: u.phone, stamps: u.stamps || 0, vouchers: u.vouchers || 0, orders: orders.length, spent, createdAt: u.createdAt };
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return { customers, loyalty: settings().loyalty };
+  });
+
+  // Cadangan seluruh data (tanpa sesi login). Berisi data pelanggan dan hash kata sandi: simpan dengan aman.
+  // Untuk memulihkan: hentikan server, salin berkas ini menjadi db.json di lokasi data, lalu jalankan lagi.
+  route('GET', '/api/admin/backup', 'admin', (ctx) => {
+    const stamp = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jakarta' }).replace(/\D/g, '').slice(0, 12);
+    ctx.res.setHeader('Content-Disposition', `attachment; filename="zibbwash-cadangan-${stamp}.json"`);
+    const { sessions, ...data } = db(); // eslint-disable-line no-unused-vars
+    return data;
   });
 
   route('GET', '/api/admin/settings', 'admin', () => {
@@ -367,8 +439,20 @@ function createApp(opts = {}) {
       ctx.body = await readBody(req);
     }
     const result = r.handler(ctx);
-    if (req.method !== 'GET') store.save();
+    if (result === STREAM) return; // respons dikelola handler (aliran SSE)
+    if (req.method !== 'GET') {
+      store.save();
+      announce(result);
+    }
     sendJson(res, 200, result);
+  }
+
+  // Setelah data tersimpan, beri tahu admin dan pemilik pesanan bahwa pesanan itu berubah.
+  function announce(result) {
+    const id = result && result.order && result.order.id;
+    if (!id) return;
+    const o = db().orders.find((x) => x.id === id);
+    publish('orders', id, o && o.userId);
   }
 
   function serveStatic(req, res, url) {
@@ -403,7 +487,8 @@ function createApp(opts = {}) {
     let url;
     try { url = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400); return res.end(); }
     try {
-      if (url.pathname.startsWith('/api/')) await handleApi(req, res, url);
+      if (url.pathname === '/healthz') sendJson(res, 200, { ok: true }); // untuk pengecekan kesehatan oleh hosting
+      else if (url.pathname.startsWith('/api/')) await handleApi(req, res, url);
       else serveStatic(req, res, url);
     } catch (e) {
       if (e instanceof HttpError) {
@@ -415,7 +500,11 @@ function createApp(opts = {}) {
     }
   });
 
-  return { server, store };
+  server.on('close', () => clearInterval(heartbeat));
+  return {
+    server, store, production, persistent: dbLocation.persistent,
+    closeLive: () => liveClose(() => true),
+  };
 }
 
 module.exports = { createApp };
@@ -423,11 +512,49 @@ module.exports = { createApp };
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST || '0.0.0.0';
-  const { server, store } = createApp();
+  const { server, store, production, persistent, closeLive } = createApp();
+
+  const flag = (v) => /^(1|true|yes|on)$/i.test(String(v || ''));
+  const lines = [];
+  if (flag(process.env.RESET_ADMIN_PASSWORD) && process.env.ADMIN_PASSWORD) {
+    store.resetAdminPassword(process.env.ADMIN_PASSWORD);
+    lines.push('[INFO] Kata sandi admin disetel ulang dari ADMIN_PASSWORD. Hapus RESET_ADMIN_PASSWORD agar tidak terulang tiap restart.');
+  }
+  if (store.generatedAdminPassword) {
+    lines.push(
+      '================================================================',
+      ' AKUN ADMIN DIBUAT. Catat sekarang, kata sandi ini tidak ditampilkan lagi:',
+      `   username : admin`,
+      `   kata sandi: ${store.generatedAdminPassword}`,
+      ' Segera ganti lewat menu "Ganti kata sandi" setelah masuk.',
+      '================================================================',
+    );
+  } else if (store.adminHasDefaultPassword()) {
+    lines.push(production
+      ? '[PERINGATAN] Admin masih memakai kata sandi bawaan "admin123". Siapa pun bisa masuk. Ganti SEKARANG (atau set ADMIN_PASSWORD dan RESET_ADMIN_PASSWORD=1 lalu deploy ulang).'
+      : '[INFO] Admin: username "admin", kata sandi awal "admin123". Segera ganti.');
+  }
+  if (production && !persistent) {
+    lines.push('[PERINGATAN] Data disimpan di folder aplikasi. Di hosting, berkas ini hilang saat deploy ulang atau restart. Pasang disk/volume permanen lalu set DB_FILE atau DATA_DIR ke lokasinya.');
+  }
+
   server.listen(port, host, () => {
     console.log('\n  ZibbWash Laundry berjalan');
     console.log(`  Buka  : http://localhost:${port}`);
     console.log(`  Data  : ${store.file}`);
-    console.log('  Admin : username "admin" (kata sandi awal: admin123, segera ganti)\n');
+    console.log(`  Mode  : ${production ? 'produksi' : 'pengembangan'}\n`);
+    for (const l of lines) console.log(`  ${l}`);
+    if (lines.length) console.log('');
   });
+
+  // Penutupan rapi saat hosting mengirim SIGTERM (deploy ulang): putus aliran SSE agar server tidak menggantung.
+  const stop = (sig) => {
+    console.log(`\n  ${sig} diterima, menutup server...`);
+    closeLive();
+    server.close(() => process.exit(0));
+    if (server.closeIdleConnections) server.closeIdleConnections();
+    setTimeout(() => process.exit(0), 4000).unref();
+  };
+  process.on('SIGTERM', () => stop('SIGTERM'));
+  process.on('SIGINT', () => stop('SIGINT'));
 }
