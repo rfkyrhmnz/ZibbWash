@@ -31,7 +31,7 @@ Port bisa diubah dengan `PORT=8080 npm start`.
 
 ## Memasang online (agar bisa dibuka dari HP dan komputer)
 
-Selama server dijalankan di laptop, website hanya bisa dibuka saat laptop menyala dan terhubung. Supaya bisa diakses kapan saja dari perangkat apa pun, pasang di hosting. Syarat utamanya: hosting harus punya **disk permanen**, karena database-nya berupa berkas `db.json`. Hosting gratis menghapus berkas lokal setiap restart atau deploy ulang, sehingga semua pesanan ikut hilang.
+Selama server dijalankan di laptop, website hanya bisa dibuka saat laptop menyala dan terhubung. Supaya bisa diakses kapan saja dari perangkat apa pun, pasang di hosting. Syarat utamanya: data harus tersimpan permanen, karena database-nya berupa berkas `db.json`. Hosting gratis menghapus berkas lokal setiap restart atau deploy ulang. Ada dua jalan: hosting dengan **disk permanen**, atau menyalin data ke **Upstash Redis** (gratis, tanpa kartu) seperti di bagian Render gratis di bawah.
 
 | Pilihan | Biaya (per November 2026, cek halaman harga masing-masing) | Catatan |
 |---|---|---|
@@ -39,9 +39,26 @@ Selama server dijalankan di laptop, website hanya bisa dibuka saat laptop menyal
 | Render | Instance Starter $7/bulan + disk $0,25/GB/bulan | Ada `render.yaml`, pemasangan hampir otomatis |
 | Oracle Cloud Always Free | $0, tanpa batas waktu (butuh kartu untuk verifikasi) | Server virtual 24 jam dengan disk permanen. Lebih teknis dan ada risiko instance idle ditarik, lihat bagian Oracle di bawah |
 | Server virtual (VPS) | Sewa bulanan | Paling fleksibel, tetapi butuh langkah teknis sendiri (lihat catatan di bawah) |
-| Paket gratis | $0 | **Tidak cocok.** Di Render gratis, layanan mati setelah 15 menit sepi (pelanggan menunggu ±1 menit) dan data hilang tiap restart |
+| Render gratis + Upstash | $0, tanpa kartu kredit | Data aman di Upstash. Layanan tidur setelah 15 menit sepi, pengunjung pertama menunggu hingga ±1 menit. Lihat bagian Render gratis di bawah |
+| Paket gratis tanpa Upstash | $0 | **Tidak cocok.** Data hilang tiap restart |
 
 Gunakan wilayah server **Singapura** agar cepat dari Indonesia.
+
+### Render gratis + Upstash (tanpa kartu kredit)
+
+Render gratis tidak punya disk permanen, jadi data disalin ke **Upstash Redis**. Berkas `db.json` di Render hanya cache kerja; sumber kebenarannya ada di Upstash. Saat server mulai, snapshot diambil dari Upstash. Setiap perubahan disalin ke sana (digabung per ±1,5 detik), dan sisa perubahan dikirim dulu saat Render menidurkan atau mengganti layanan.
+
+1. **Upstash:** daftar di upstash.com (bisa lewat GitHub atau Google), **Create Database**. Beri nama bebas, pilih wilayah **Singapore**, paket gratis. Di halaman database, bagian **REST API**, salin dua nilai: `UPSTASH_REDIS_REST_URL` dan `UPSTASH_REDIS_REST_TOKEN` (token itu rahasia).
+2. **Render:** daftar di render.com lewat akun GitHub, lalu **New**, **Blueprint**, pilih repo `ZibbWash`. Isi tiga nilai yang diminta: `ADMIN_PASSWORD` (kata sandi admin pilihanmu), serta dua nilai dari Upstash. Klik **Apply**.
+   - Kalau Blueprint meminta kartu, pakai jalur manual: **New**, **Web Service**, pilih repo, wilayah Singapore, runtime Node, Build Command `npm install`, Start Command `npm start`, **Instance Type: Free**, lalu isi empat variabel: `NODE_ENV=production`, `ADMIN_PASSWORD`, dan dua nilai Upstash.
+3. Setelah deploy selesai, buka alamat `https://namaservice.onrender.com`. Di tab **Logs** harus ada "Upstash masih kosong: database baru dikirim" (pertama kali) atau "Database dipulihkan dari Upstash" (start berikutnya).
+
+Batasan yang perlu diketahui:
+- **Tidur setelah 15 menit tanpa pengunjung.** Pengunjung pertama setelah itu menunggu hingga ±1 menit. Data tidak hilang. Render menyebut paket gratis untuk uji coba dan staf Render pernah menyebut menjaga layanan agar tak tidur dengan ping sebagai penyalahgunaan, jadi proyek ini sengaja tidak menyertakannya. Bila pelanggan mulai ramai, ubah `plan` menjadi `starter` ($7/bulan) tanpa mengubah kode atau data.
+- **750 jam gratis per bulan** untuk seluruh akun Render. Satu layanan yang menyala terus pas di batas itu, jadi jangan menaruh layanan gratis lain di akun yang sama.
+- **Upstash gratis:** 256 MB dan 500 ribu perintah per bulan, jauh melebihi kebutuhan satu outlet (satu perubahan = satu perintah). Database yang tidak tersentuh ≥14 hari diarsipkan oleh Upstash; server menulis tiap 12 jam selama menyala. Bila situs sepi total lebih dari dua minggu (Render tidur sehingga server tidak menulis), buka situsnya minimal sekali dalam dua minggu. Kalau sudah terlanjur diarsipkan, server tidak mau start dan log menyebut gagal membaca Upstash: pulihkan databasenya dari konsol Upstash (backup disimpan), atau buat baru lalu perbarui dua nilai di Render.
+- **Server sengaja tidak start bila Upstash tak terjangkau.** Itu mencegah database kosong menimpa data asli. Render akan mencoba menyalakannya lagi.
+- Jangan menyalakan dua layanan dengan Upstash yang sama. Instance yang tertinggal versi ditolak penulisannya dan berhenti sendiri supaya data tidak saling timpa.
 
 ### Railway
 
@@ -55,7 +72,7 @@ Gunakan wilayah server **Singapura** agar cepat dari Indonesia.
 ### Render
 
 1. Daftar di render.com dan hubungkan akun GitHub.
-2. **New**, **Blueprint**, lalu pilih repo `ZibbWash`. Render membaca `render.yaml` (wilayah Singapura, disk 1 GB, health check).
+2. **New**, **Blueprint**, pilih repo `ZibbWash`, dan isi **Blueprint file path** dengan `deploy/render.starter.yaml` (wilayah Singapura, disk 1 GB, health check). Itu versi berbayar; versi gratis ada di bagian sebelumnya.
 3. Saat diminta `ADMIN_PASSWORD`, isi kata sandi admin yang kuat, lalu **Apply**.
 4. Tunggu deploy selesai, lalu buka alamat `https://zibbwash-xxxx.onrender.com`.
 
@@ -123,6 +140,8 @@ Yang perlu diketahui:
 | `RESET_ADMIN_PASSWORD=1` | Paksa kata sandi admin menjadi `ADMIN_PASSWORD` saat server start. Dipakai bila lupa kata sandi: set keduanya, deploy ulang, masuk, lalu **hapus** `RESET_ADMIN_PASSWORD` |
 | `DATA_DIR` atau `DB_FILE` | Lokasi database. Arahkan ke disk permanen. Di Railway otomatis memakai volume |
 | `TRUST_PROXY=1` | Hanya untuk VPS di belakang Nginx/Caddy: baca IP pengunjung dari `X-Forwarded-For` agar pembatas login dihitung per pengunjung |
+| `UPSTASH_REDIS_REST_URL` dan `UPSTASH_REDIS_REST_TOKEN` | Salinan database di Upstash Redis untuk hosting tanpa disk permanen (Render gratis). Harus diisi keduanya. Saat aktif, `db.json` hanya cache, dan server menolak start bila Upstash tak terjangkau |
+| `REMOTE_DB_KEY` | Awalan kunci di Upstash (bawaan `zibbwash`). Ubah hanya bila satu database Upstash dipakai beberapa aplikasi |
 | `GOOGLE_MAPS_API_KEY` | API key Google Maps (menimpa yang diisi di halaman admin) |
 | `PORT` | Diatur otomatis oleh hosting |
 | `HOST` | Alamat yang didengarkan. Bawaan `0.0.0.0`. Di belakang Caddy/Nginx pada satu server, isi `127.0.0.1` agar aplikasi tidak terbuka langsung |
@@ -201,10 +220,13 @@ lib/
   logic.js           aturan bisnis: validasi, tagihan, alur status, pembayaran, stamp
   auth.js            hash kata sandi (scrypt), sesi cookie, pembatas login
   store.js           database JSON (baca/tulis atomik) + pengaturan bawaan
+  remote.js          salinan database di Upstash Redis (REST): pulihkan saat start, kirim tiap perubahan, cek versi
 scripts/seed-demo.js data contoh
 test/api.test.js     uji alur lengkap lewat HTTP
 test/production.test.js  uji pemasangan online: kata sandi admin, SSE, cadangan, IP
-render.yaml          Blueprint untuk Render
+test/remote.test.js  uji penyimpanan Upstash (dengan server Upstash tiruan)
+render.yaml          Blueprint Render gratis (data di Upstash)
+deploy/render.starter.yaml  Blueprint Render berbayar (disk permanen)
 deploy/oracle-setup.sh  pasang/perbarui di server Ubuntu (Oracle Always Free): Node, systemd, Caddy, firewall
 data/db.json         "database" (dibuat otomatis, jangan di-commit)
 public/
@@ -235,7 +257,7 @@ Semua endpoint selain publik menolak tamu (401), dan endpoint admin menolak pela
 npm test
 ```
 
-24 skenario black box lewat HTTP, memakai database sementara (data asli tidak tersentuh): kontrol akses per peran, validasi form, hitung ongkir, alur pesan sampai stamp, voucher, pembatalan, pengaturan tarif, keamanan dasar (JSON rusak, path traversal, pembatas login), serta untuk pemasangan online: kata sandi admin acak, urutan lokasi database, pembaca IP di balik proxy (termasuk upaya memalsukan header), pembaruan langsung hanya ke yang berhak, dan cadangan data.
+37 skenario black box lewat HTTP, memakai database sementara (data asli tidak tersentuh): kontrol akses per peran, validasi form, hitung ongkir, alur pesan sampai stamp, voucher, pembatalan, pengaturan tarif, keamanan dasar (JSON rusak, path traversal, pembatas login), serta untuk pemasangan online: kata sandi admin acak, urutan lokasi database, pembaca IP di balik proxy (termasuk upaya memalsukan header), pembaruan langsung hanya ke yang berhak, dan cadangan data. Penyimpanan Upstash diuji dengan server tiruan: pemulihan setelah disk hilang, penggabungan kiriman, kirim ulang saat Upstash gagal, balasan hilang tetapi kiriman sudah masuk, dua instance yang saling menimpa, dan menolak start bila Upstash mati. Skrip Lua pengecekan versi juga sudah dicoba di redis-server sungguhan.
 
 ## Catatan sebelum dipakai sungguhan
 

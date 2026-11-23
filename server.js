@@ -5,6 +5,9 @@
  * Variabel lingkungan opsional:
  *   PORT, HOST
  *   DB_FILE | DATA_DIR            lokasi database (di hosting: arahkan ke disk/volume permanen)
+ *   UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+ *                                 salinan database di Upstash (gratis) untuk hosting tanpa disk permanen, mis. Render gratis
+ *   REMOTE_DB_KEY                 awalan kunci di Upstash (bawaan "zibbwash")
  *   NODE_ENV=production           kata sandi admin awal dibuat acak bila ADMIN_PASSWORD kosong
  *   ADMIN_PASSWORD                kata sandi admin awal (hanya saat database pertama dibuat)
  *   RESET_ADMIN_PASSWORD=1        paksa kata sandi admin = ADMIN_PASSWORD saat start (lupa kata sandi)
@@ -17,6 +20,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
 const { Store, resolveDbFile } = require('./lib/store');
+const { RemoteStore } = require('./lib/remote');
 const auth = require('./lib/auth');
 const L = require('./lib/logic');
 
@@ -42,6 +46,8 @@ function createApp(opts = {}) {
   const production = opts.production !== undefined ? !!opts.production : process.env.NODE_ENV === 'production';
   const dbLocation = opts.dbFile ? { file: opts.dbFile, persistent: true } : resolveDbFile();
   const store = new Store(dbLocation.file, { adminPassword: opts.adminPassword || process.env.ADMIN_PASSWORD || null, production });
+  const remote = opts.remote || null; // RemoteStore (Upstash) bila dipakai; berkas lokal hanya jadi cache kerja
+  if (remote) remote.attach(store);
   const loginLimiter = new auth.RateLimiter(8, 5 * 60 * 1000);
   const routes = [];
 
@@ -487,7 +493,7 @@ function createApp(opts = {}) {
     let url;
     try { url = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400); return res.end(); }
     try {
-      if (url.pathname === '/healthz') sendJson(res, 200, { ok: true }); // untuk pengecekan kesehatan oleh hosting
+      if (url.pathname === '/healthz') sendJson(res, 200, remote ? { ok: true, store: remote.status() } : { ok: true }); // untuk pengecekan kesehatan oleh hosting
       else if (url.pathname.startsWith('/api/')) await handleApi(req, res, url);
       else serveStatic(req, res, url);
     } catch (e) {
@@ -502,7 +508,7 @@ function createApp(opts = {}) {
 
   server.on('close', () => clearInterval(heartbeat));
   return {
-    server, store, production, persistent: dbLocation.persistent,
+    server, store, production, persistent: dbLocation.persistent || !!remote, remote,
     closeLive: () => liveClose(() => true),
   };
 }
@@ -510,9 +516,23 @@ function createApp(opts = {}) {
 module.exports = { createApp };
 
 if (require.main === module) {
+  main().catch((e) => { console.error('\n  [GAGAL]', e.message, '\n'); process.exit(1); });
+}
+
+async function main() {
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST || '0.0.0.0';
-  const { server, store, production, persistent, closeLive } = createApp();
+
+  // Penyimpanan jarak jauh (Upstash): ambil snapshot SEBELUM Store dibuat. Bila Upstash tak terjangkau, berhenti
+  // di sini (lempar error) supaya tidak memulai dengan database kosong lalu menimpa data asli.
+  const remote = RemoteStore.fromEnv(process.env);
+  let restored = false;
+  if (remote) {
+    restored = await remote.restore(resolveDbFile().file);
+    remote.onConflict = () => process.exit(1);
+  }
+
+  const { server, store, production, persistent, closeLive } = createApp({ remote });
 
   const flag = (v) => /^(1|true|yes|on)$/i.test(String(v || ''));
   const lines = [];
@@ -535,25 +555,41 @@ if (require.main === module) {
       : '[INFO] Admin: username "admin", kata sandi awal "admin123". Segera ganti.');
   }
   if (production && !persistent) {
-    lines.push('[PERINGATAN] Data disimpan di folder aplikasi. Di hosting, berkas ini hilang saat deploy ulang atau restart. Pasang disk/volume permanen lalu set DB_FILE atau DATA_DIR ke lokasinya.');
+    lines.push('[PERINGATAN] Data disimpan di folder aplikasi. Di hosting, berkas ini hilang saat deploy ulang atau restart. Pasang disk/volume permanen lalu set DB_FILE atau DATA_DIR ke lokasinya, atau isi UPSTASH_REDIS_REST_URL dan UPSTASH_REDIS_REST_TOKEN.');
+  }
+  if (remote) {
+    lines.push(restored
+      ? '[INFO] Database dipulihkan dari Upstash. Perubahan disalin ke sana otomatis.'
+      : '[INFO] Upstash masih kosong: database baru dikirim ke sana. Perubahan berikutnya disalin otomatis.');
   }
 
   server.listen(port, host, () => {
     console.log('\n  ZibbWash Laundry berjalan');
     console.log(`  Buka  : http://localhost:${port}`);
-    console.log(`  Data  : ${store.file}`);
+    console.log(`  Data  : ${store.file}${remote ? ' (cache) + Upstash' : ''}`);
     console.log(`  Mode  : ${production ? 'produksi' : 'pengembangan'}\n`);
     for (const l of lines) console.log(`  ${l}`);
     if (lines.length) console.log('');
   });
 
-  // Penutupan rapi saat hosting mengirim SIGTERM (deploy ulang): putus aliran SSE agar server tidak menggantung.
-  const stop = (sig) => {
+  // Penutupan rapi saat hosting mengirim SIGTERM (deploy ulang, atau Render menidurkan layanan gratis):
+  // putus aliran SSE, tunggu permintaan yang berjalan, kirim sisa perubahan ke Upstash, baru keluar.
+  let stopping = false;
+  const stop = async (sig) => {
+    if (stopping) return;
+    stopping = true;
     console.log(`\n  ${sig} diterima, menutup server...`);
+    setTimeout(() => process.exit(0), remote ? 14000 : 4000).unref();
     closeLive();
-    server.close(() => process.exit(0));
+    const closed = new Promise((r) => server.close(r));
     if (server.closeIdleConnections) server.closeIdleConnections();
-    setTimeout(() => process.exit(0), 4000).unref();
+    await Promise.race([closed, new Promise((r) => setTimeout(r, 3000))]);
+    if (remote) {
+      const ok = await remote.flush(8000);
+      console.log(ok ? '  Data tersimpan ke Upstash.' : '  [PERINGATAN] Sebagian perubahan belum sempat tersimpan ke Upstash.');
+      remote.stop();
+    }
+    process.exit(0);
   };
   process.on('SIGTERM', () => stop('SIGTERM'));
   process.on('SIGINT', () => stop('SIGINT'));
