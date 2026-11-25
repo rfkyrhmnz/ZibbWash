@@ -329,6 +329,21 @@ li:first-child > .board-row { border-top: 1px solid var(--line); }
 .pubfoot p { margin: 0; flex: 1; min-width: 200px; }
 .pubfoot a { color: var(--ink-3); }
 
+/* jam pengiriman */
+.courier { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 16px; padding: 12px 14px; background: #fff; border: 1px solid var(--line); border-radius: var(--r); font-size: .92rem; color: var(--ink-2); }
+.courier b { color: var(--navy); white-space: nowrap; }
+.courier .ic { color: var(--lagoon); }
+#courier-note .notice { margin: 10px 0 0; }
+.settings .grid-2 + .grid-3 { margin-top: 16px; }
+.courier-track { margin-bottom: 18px; }
+.courier-track .courier { margin-top: 0; }
+
+/* media sosial */
+.socials { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.socials a { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.socials a:hover span { text-decoration: underline; }
+.socials-contact { margin-top: 16px; }
+
 /* ═════════ halaman masuk ═════════ */
 .auth { min-height: 100vh; display: grid; grid-template-columns: minmax(340px, .9fr) minmax(0, 1.1fr); }
 .auth-side { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; padding: 36px 44px 140px; color: #fff; background: radial-gradient(800px 420px at 0% 0%, #0B9CBF 0%, transparent 60%), linear-gradient(170deg, #087999 0%, var(--navy) 80%); }

@@ -2,7 +2,7 @@
 import { get, post, put } from '../api.js';
 import {
   html, raw, mount, $, $$, on, icon, rupiah, kg, num, fmtDate, timeAgo, phonePretty, waLink, toast, openModal, showFieldErrors,
-  statusChip, payChip,
+  statusChip, payChip, courierStatus, courierHours,
 } from '../util.js';
 import { state, onCleanup, go } from '../state.js';
 import { onOrdersChanged } from '../realtime.js';
@@ -102,6 +102,8 @@ export async function orders({ container, params }) {
     const nextStep = closed ? null : o.flow[o.currentIndex + 1] || null;
     const wa = waLink(`62${o.customerPhone.slice(1)}`, `Halo ${o.customerName}, ini ZibbWash Laundry soal pesanan ${o.id}.`);
     const payMethods = state.config.paymentMethods;
+    // Peringatan saja (tidak memblokir): admin bisa saja baru mencatat penjemputan yang terjadi sebelum jam tutup.
+    const offHours = nextStep && ['pickup', 'delivering'].includes(nextStep.key) && !courierStatus(state.config.delivery).open;
 
     mount(box, html`
       <div class="detail">
@@ -123,6 +125,7 @@ export async function orders({ container, params }) {
           <ol class="stepper">
             ${o.flow.map((s) => html`<li class="${s.state}"><span>${s.state === 'done' ? icon('check', 12) : ''}</span>${s.label}</li>`)}
           </ol>
+          ${offHours ? html`<div class="notice notice-wait slim">${icon('clock', 18)}<span><b>Di luar jam pengiriman (${courierHours(state.config.delivery)}).</b> Tahap berikutnya butuh kurir.</span></div>` : ''}
           ${closed ? html`<p class="hint">Pesanan yang sudah ${o.status === 'done' ? 'selesai' : 'dibatalkan'} tidak bisa diubah lagi.</p>` : html`
             <form id="status-form" class="form" novalidate>
               <div class="field"><label for="st">Ubah status ke</label>
@@ -299,6 +302,8 @@ export async function settings({ container }) {
             ${f('business.name', 'Nama bisnis', s.business.name)}
             ${f('business.phone', 'Nomor HP / WhatsApp', s.business.phone, { type: 'tel' })}
             ${f('business.address', 'Alamat outlet', s.business.address, { full: true })}
+            ${f('business.instagram', 'Username Instagram', s.business.instagram, { hint: 'Tanpa tanda @. Kosongkan untuk menyembunyikan.' })}
+            ${f('business.email', 'Email', s.business.email, { type: 'email', hint: 'Kosongkan untuk menyembunyikan.' })}
             ${f('business.lat', 'Latitude outlet', s.business.lat, { type: 'number', step: 'any', hint: 'Titik ini jadi dasar hitung jarak antar-jemput.' })}
             ${f('business.lng', 'Longitude outlet', s.business.lng, { type: 'number', step: 'any', hint: 'Di Google Maps: klik kanan lokasi outlet, lalu klik angka koordinat untuk menyalin.' })}
             ${f('maps.apiKey', 'Google Maps API Key', s.maps.apiKey, { full: true, hint: 'Kosongkan untuk memakai OpenStreetMap. Aktifkan Maps JavaScript API, Directions API, dan Geocoding API, lalu batasi kunci ke domain websitemu.' })}
@@ -318,6 +323,10 @@ export async function settings({ container }) {
 
         <section class="panel">
           <h2>Ongkir antar-jemput</h2>
+          <div class="grid-2">
+            ${f('delivery.openTime', 'Jam buka pengiriman (WIB)', s.delivery.openTime, { type: 'time' })}
+            ${f('delivery.closeTime', 'Jam tutup pengiriman (WIB)', s.delivery.closeTime, { type: 'time' })}
+          </div>
           <div class="grid-3">
             ${f('delivery.freeKm', 'Gratis sampai', s.delivery.freeKm, { type: 'number', suffix: 'km', step: 'any', min: 0 })}
             ${f('delivery.perKm', 'Tarif setelahnya', s.delivery.perKm, { type: 'number', suffix: 'Rp/km', min: 0 })}
@@ -354,10 +363,10 @@ export async function settings({ container }) {
     const btn = $('.btn-primary', form); btn.disabled = true;
     try {
       await put('/api/admin/settings', {
-        business: { name: val('business.name'), phone: val('business.phone'), address: val('business.address'), lat: val('business.lat'), lng: val('business.lng') },
+        business: { name: val('business.name'), phone: val('business.phone'), address: val('business.address'), lat: val('business.lat'), lng: val('business.lng'), instagram: val('business.instagram'), email: val('business.email') },
         maps: { apiKey: val('maps.apiKey') },
         services: s.services.map((v) => ({ id: v.id, pricePerKg: val(`services.${v.id}.pricePerKg`), eta: val(`services.${v.id}.eta`) })),
-        delivery: { freeKm: val('delivery.freeKm'), perKm: val('delivery.perKm'), maxKm: val('delivery.maxKm'), chargePerLeg: form.elements['delivery.chargePerLeg'].checked },
+        delivery: { freeKm: val('delivery.freeKm'), perKm: val('delivery.perKm'), maxKm: val('delivery.maxKm'), chargePerLeg: form.elements['delivery.chargePerLeg'].checked, openTime: val('delivery.openTime'), closeTime: val('delivery.closeTime') },
         loyalty: { minTransaction: val('loyalty.minTransaction'), stampsForReward: val('loyalty.stampsForReward'), rewardMaxKg: val('loyalty.rewardMaxKg') },
       });
       state.config = await get('/api/config');

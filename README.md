@@ -189,6 +189,8 @@ Alur status mengikuti pilihan pelanggan:
 | Ongkir di atas batas gratis | Rp3.000 per km, kelebihan jarak dibulatkan ke atas | idem |
 | Ongkir per arah | aktif: jemput dan antar dihitung masing-masing | idem |
 | Jangkauan maksimal antar-jemput | 20 km | idem |
+| Jam pengiriman (kurir) | 06.00–18.00 WIB | idem |
+| Instagram dan email | contoh (fiktif): `zibbwash.laundry`, `halo@zibbwash.example` | idem |
 | Stamp | 1 stamp untuk transaksi minimal Rp30.000 (setelah diskon) | idem |
 | Hadiah | 10 stamp = voucher gratis Wash & Fold maksimal 3 kg | idem |
 
@@ -197,6 +199,7 @@ Catatan penting:
 - **Tarif per kg di atas adalah angka contoh.** Sesuaikan dengan tarif sebenarnya sebelum dipakai.
 - Pesanan lama tetap memakai tarif saat dipesan. Perubahan tarif hanya berlaku untuk pesanan baru.
 - Stamp masuk **sekali per pesanan**, ketika pesanan berstatus *Selesai* dan *Lunas*.
+- Kurir buka bila jam buka ≤ waktu sekarang < jam tutup (WIB), berlaku setiap hari. Pesanan tetap diterima di luar jam itu; untuk pesanan yang minta dijemput, riwayatnya mencatat tanggal dan jam penjemputan berikutnya. Panel admin hanya memberi peringatan, tidak memblokir perubahan status.
 - Voucher dipakai saat memesan layanan Wash & Fold. Bila pesanan dibatalkan, voucher otomatis kembali.
 - Pelanggan hanya bisa membatalkan pesanan yang masih berstatus *Pesanan diterima*. Setelah itu, admin yang membatalkan.
 - Jarak dari peta dicek ulang di server: tidak boleh lebih pendek dari garis lurus ke outlet, jadi ongkir tidak bisa diakali dari browser.
@@ -239,6 +242,7 @@ scripts/seed-demo.js data contoh
 test/api.test.js     uji alur lengkap lewat HTTP
 test/production.test.js  uji pemasangan online: kata sandi admin, SSE, cadangan, IP
 test/remote.test.js  uji penyimpanan Upstash (dengan server Upstash tiruan)
+test/hours.test.js   uji nilai batas jam pengiriman serta validasi jam dan medsos
 render.yaml          Blueprint Render gratis (data di Upstash)
 Dockerfile           image untuk hosting container (Suga dan sejenisnya)
 deploy/render.starter.yaml  Blueprint Render berbayar (disk permanen)
@@ -272,7 +276,7 @@ Semua endpoint selain publik menolak tamu (401), dan endpoint admin menolak pela
 npm test
 ```
 
-37 skenario black box lewat HTTP, memakai database sementara (data asli tidak tersentuh): kontrol akses per peran, validasi form, hitung ongkir, alur pesan sampai stamp, voucher, pembatalan, pengaturan tarif, keamanan dasar (JSON rusak, path traversal, pembatas login), serta untuk pemasangan online: kata sandi admin acak, urutan lokasi database, pembaca IP di balik proxy (termasuk upaya memalsukan header), pembaruan langsung hanya ke yang berhak, dan cadangan data. Penyimpanan Upstash diuji dengan server tiruan: pemulihan setelah disk hilang, penggabungan kiriman, kirim ulang saat Upstash gagal, balasan hilang tetapi kiriman sudah masuk, dua instance yang saling menimpa, dan menolak start bila Upstash mati. Skrip Lua pengecekan versi juga sudah dicoba di redis-server sungguhan.
+43 skenario otomatis (sebagian besar black box lewat HTTP), memakai database sementara (data asli tidak tersentuh): kontrol akses per peran, validasi form, hitung ongkir, alur pesan sampai stamp, voucher, pembatalan, pengaturan tarif, keamanan dasar (JSON rusak, path traversal, pembatas login), serta untuk pemasangan online: kata sandi admin acak, urutan lokasi database, pembaca IP di balik proxy (termasuk upaya memalsukan header), pembaruan langsung hanya ke yang berhak, dan cadangan data. Penyimpanan Upstash diuji dengan server tiruan: pemulihan setelah disk hilang, penggabungan kiriman, kirim ulang saat Upstash gagal, balasan hilang tetapi kiriman sudah masuk, dua instance yang saling menimpa, dan menolak start bila Upstash mati. Jam pengiriman diuji pada nilai batasnya (05.59, 06.00, 17.59, 18.00) dengan waktu yang disuntikkan, beserta validasi jam dan medsos. Skrip Lua pengecekan versi juga sudah dicoba di redis-server sungguhan.
 
 ## Catatan sebelum dipakai sungguhan
 

@@ -52,6 +52,28 @@ export const waLink = (wa, text) => `https://wa.me/${wa}${text ? `?text=${encode
 export const mapsLink = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 export const phonePretty = (p) => String(p).replace(/^(\d{4})(\d{4})(\d+)$/, '$1-$2-$3');
 
+// ───────── jam pengiriman (WIB), padanan lib/logic.js ─────────
+const toMinutes = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3));
+export function courierStatus(delivery, now = new Date()) {
+  const t = toMinutes(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now));
+  const from = toMinutes(delivery.openTime);
+  const to = toMinutes(delivery.closeTime);
+  return { open: t >= from && t < to, nextDay: t >= to };
+}
+export const jam = (hm) => String(hm).replace(':', '.');
+export const courierHours = (d) => `${jam(d.openTime)}–${jam(d.closeTime)} WIB`;
+/** Kalimat kapan kurir buka lagi, mis. "besok pukul 06.00 WIB". */
+export const courierNext = (d) => `${courierStatus(d).nextDay ? 'besok' : 'hari ini'} pukul ${jam(d.openTime)} WIB`;
+/** Baris "Jam pengiriman" + lencana buka/tutup saat ini. */
+export function courierInfo(d) {
+  const { open } = courierStatus(d);
+  return html`
+    <div class="courier">
+      ${icon('clock', 20)}<span>Jam pengiriman <b>${courierHours(d)}</b></span>
+      <span class="chip ${open ? 'chip-ok' : 'chip-off'}"><i></i>${open ? 'Sedang buka' : 'Sedang tutup'}</span>
+    </div>`;
+}
+
 export const HANDOVER = { dropoff: 'Antar sendiri ke outlet', pickup: 'Dijemput kurir' };
 export const RETURN = { self: 'Ambil sendiri di outlet', delivery: 'Diantar kurir' };
 
@@ -109,6 +131,8 @@ const P = {
   scale: '<path d="M12 3v18M5 21h14M5 7l-3 8a4 4 0 0 0 6 0L5 7Zm14 0-3 8a4 4 0 0 0 6 0l-3-8ZM5 7h14"/>',
   tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8Z"/><path d="M7 7h.01"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  at: '<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
 };
 export function icon(name, size = 20, cls = '') {
   return raw(`<svg class="ic ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`);
