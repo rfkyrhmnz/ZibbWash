@@ -1,6 +1,6 @@
 // Halaman depan publik: hero dengan tiket tracking, papan tarif, penggaris ongkir, kartu stamp, kontak.
-import { html, mount, $, $$, icon, rupiah, num, phonePretty, waLink, serviceIcon } from '../util.js';
-import { state } from '../state.js';
+import { html, mount, $, $$, icon, rupiah, num, phonePretty, waLink, serviceIcon, courierInfo, courierHours } from '../util.js';
+import { state, onCleanup } from '../state.js';
 
 export function landingView({ container }) {
   const cfg = state.config;
@@ -11,6 +11,12 @@ export function landingView({ container }) {
   const sample = 3.4;
   const wa = waLink(cfg.business.whatsapp, 'Halo ZibbWash, saya mau tanya soal laundry.');
   const demoStamps = Math.min(7, stampsForReward - 1);
+  const { instagram, email } = cfg.business;
+  const socials = (cls) => (instagram || email ? html`
+    <ul class="socials ${cls}">
+      ${instagram ? html`<li><a href="https://www.instagram.com/${instagram}/" target="_blank" rel="noopener" aria-label="Instagram ${instagram}">${icon('at', 18)}<span>Instagram: ${instagram}</span></a></li>` : ''}
+      ${email ? html`<li><a href="mailto:${email}">${icon('mail', 18)}<span>${email}</span></a></li>` : ''}
+    </ul>` : '');
 
   mount(container, html`
   <div class="public">
@@ -48,6 +54,7 @@ export function landingView({ container }) {
           </div>
           <ul class="hero-facts">
             <li>${icon('truck', 18)}Antar-jemput gratis sampai ${freeKm} km</li>
+            <li>${icon('clock', 18)}Jam pengiriman ${courierHours(cfg.delivery)}</li>
             <li>${icon('scale', 18)}Tagihan dari berat timbangan sebenarnya</li>
             <li>${icon('gift', 18)}${stampsForReward} stamp, cuci Wash & Fold gratis</li>
           </ul>
@@ -108,6 +115,7 @@ export function landingView({ container }) {
           <div class="section-head left">
             <h2>Antar-jemput gratis sampai ${freeKm}&nbsp;km</h2>
             <p>Tandai lokasimu di peta saat memesan. Jarak dari outlet dihitung otomatis, lalu ongkirnya muncul di rincian tagihan. Lebih dari ${freeKm} km, tambahan ${rupiah(perKm)} untuk setiap kilometer.</p>
+            <div data-courier>${courierInfo(cfg.delivery)}</div>
           </div>
           <div class="ruler" data-free="${freeKm}" data-perkm="${perKm}">
             <p class="ruler-read" aria-live="polite"></p>
@@ -149,6 +157,7 @@ export function landingView({ container }) {
           <div>
             <h2>Ada yang mau ditanyakan dulu?</h2>
             <p>Hubungi ${cfg.business.name} di <b>${phonePretty(cfg.business.phone)}</b>. Kami balas lewat WhatsApp.</p>
+            ${socials('socials-contact')}
           </div>
           <div class="cta-row">
             <a class="btn btn-wa btn-lg" href="${wa}" target="_blank" rel="noopener">${icon('whatsapp', 20)}Chat WhatsApp</a>
@@ -160,7 +169,8 @@ export function landingView({ container }) {
 
     <footer class="pubfoot">
       <div class="brand brand-sm"><img src="/img/logo-mark.png" alt="" width="26" height="29"><span>${cfg.business.name}</span></div>
-      <p>${cfg.business.address}</p>
+      <p>${cfg.business.address}<br>Jam pengiriman ${courierHours(cfg.delivery)}</p>
+      ${socials('socials-foot')}
       <a href="#/masuk?role=admin">Masuk sebagai admin</a>
     </footer>
   </div>`);
@@ -171,6 +181,10 @@ export function landingView({ container }) {
     const target = document.getElementById(a.dataset.scroll);
     if (target) target.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   }));
+
+  // Lencana buka/tutup diperbarui tanpa muat ulang halaman.
+  const courierTimer = setInterval(() => mount($('[data-courier]', container), courierInfo(cfg.delivery)), 30000);
+  onCleanup(() => clearInterval(courierTimer));
 
   // Penggaris ongkir interaktif.
   const ruler = $('.ruler', container);

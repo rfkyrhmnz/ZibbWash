@@ -2,7 +2,7 @@
 import { get, post } from '../api.js';
 import {
   html, raw, mount, $, $$, on, icon, rupiah, kg, num, fmtDate, fmtDateTime, debounce, toast, openModal, showFieldErrors,
-  statusChip, payChip, serviceIcon, waLink, HANDOVER, RETURN,
+  statusChip, payChip, serviceIcon, waLink, HANDOVER, RETURN, courierInfo, courierStatus, courierNext,
 } from '../util.js';
 import { state, onCleanup, go, updateUser } from '../state.js';
 import { onOrdersChanged } from '../realtime.js';
@@ -180,6 +180,7 @@ export async function orderForm({ container, query }) {
                 </div>
               </fieldset>
               <p class="hint">Penjemputan atau pengantaran gratis sampai ${freeKm} km dari outlet, selanjutnya ${rupiah(perKm)} per km.</p>
+              <div id="courier-note" aria-live="polite"></div>
             </section>
 
             <section class="panel field" id="loc-panel" data-field="address" hidden>
@@ -230,7 +231,25 @@ export async function orderForm({ container, query }) {
     })}`);
   }
 
+  let courierDrawn = '';
+  function drawCourier() {
+    const d = cfg.delivery;
+    const c = courierStatus(d);
+    let note = '';
+    if (st.handover === 'pickup' && !c.open) {
+      note = html`<div class="notice notice-wait slim">${icon('info', 18)}<span><b>Kurir sedang tutup.</b> Pesanan tetap bisa dikirim, penjemputan dilakukan mulai ${courierNext(d)}.</span></div>`;
+    } else if (legs() > 0) {
+      note = html`<p class="hint">Kurir hanya menjemput dan mengantar pada jam pengiriman.</p>`;
+    }
+    const markup = String(html`${courierInfo(d)}${note}`);
+    // Hanya ditulis ulang bila isinya berubah, supaya pembaca layar tidak mengulang pesan yang sama.
+    if (markup !== courierDrawn) { courierDrawn = markup; $('#courier-note', root).innerHTML = markup; }
+  }
+  const courierTimer = setInterval(drawCourier, 30000);
+  onCleanup(() => clearInterval(courierTimer));
+
   function syncVisibility() {
+    drawCourier();
     const needLoc = legs() > 0;
     $('#loc-panel', root).hidden = !needLoc;
     if (needLoc) ensureMap();
@@ -368,7 +387,8 @@ export async function orderForm({ container, query }) {
       };
       const res = await post('/api/orders', body);
       const me = await get('/api/auth/me'); if (me.user) updateUser(me.user);
-      toast(`Pesanan ${res.order.id} diterima.`, 'ok');
+      const later = st.handover === 'pickup' && !courierStatus(cfg.delivery).open;
+      toast(`Pesanan ${res.order.id} diterima.${later ? ` Kurir menjemput mulai ${courierNext(cfg.delivery)}.` : ''}`, 'ok');
       go(`/app/pesanan/${res.order.id}`);
     } catch (ex) {
       if (ex.fields) { showFieldErrors(form, ex.fields); toast(ex.message, 'error'); }
@@ -421,6 +441,9 @@ export async function tracking({ container, params }) {
     const wa = waLink(cfg.business.whatsapp, `Halo ZibbWash, saya mau tanya soal pesanan ${o.id}.`);
     const canPay = b.isFinal && o.payment.status === 'unpaid' && o.status !== 'cancelled';
     const cur = o.flow[o.currentIndex];
+    // Jam kurir ditampilkan selama masih ada penjemputan atau pengantaran yang akan datang.
+    const awaitsCourier = (o.handover === 'pickup' && o.status === 'received')
+      || (o.returnMethod === 'delivery' && !['received', 'pickup', 'done', 'cancelled'].includes(o.status));
 
     mount(container, html`
       <div class="page">
@@ -439,6 +462,7 @@ export async function tracking({ container, params }) {
 
         ${o.status === 'cancelled' ? html`<div class="notice notice-off">${icon('info', 20)}<span><b>Pesanan ini dibatalkan.</b> ${o.voucherUsed ? 'Voucher kamu sudah dikembalikan.' : ''}</span></div>` : ''}
         ${o.status !== 'cancelled' && o.status !== 'done' && cur ? html`<div class="now-card"><span class="now-ic">${icon('drop', 22)}</span><div><b>${cur.label}</b><p>${cur.desc}</p></div></div>` : ''}
+        ${awaitsCourier ? html`<div class="courier-track">${courierInfo(cfg.delivery)}</div>` : ''}
         ${o.status === 'done' ? html`<div class="notice notice-ok">${icon('check', 20)}<span><b>Pesanan selesai.</b> ${o.stamp.awarded ? 'Stamp +1 sudah masuk ke kartumu.' : (o.stamp.note || '')}</span></div>` : ''}
 
         <div class="track-grid">
@@ -566,7 +590,8 @@ export async function tracking({ container, params }) {
   }
   const stopLive = onOrdersChanged(({ ids, resync }) => { if (resync || ids.has(id)) refresh(); });
   const timer = setInterval(() => { if (!document.hidden) refresh(); }, 60000);
-  onCleanup(() => { clearInterval(timer); stopLive(); });
+  const courierTimer = setInterval(() => { const el = $('.courier-track', container); if (el) mount(el, courierInfo(state.config.delivery)); }, 30000);
+  onCleanup(() => { clearInterval(timer); clearInterval(courierTimer); stopLive(); });
 }
 
 // ───────────────────────── kartu stamp ─────────────────────────

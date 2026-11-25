@@ -108,7 +108,10 @@ function createApp(opts = {}) {
   route('GET', '/api/config', null, () => {
     const s = settings();
     return {
-      business: { name: s.business.name, phone: s.business.phone, whatsapp: s.business.whatsapp, address: s.business.address, lat: s.business.lat, lng: s.business.lng },
+      business: {
+        name: s.business.name, phone: s.business.phone, whatsapp: s.business.whatsapp, address: s.business.address, lat: s.business.lat, lng: s.business.lng,
+        instagram: s.business.instagram, email: s.business.email,
+      },
       mapsKey: process.env.GOOGLE_MAPS_API_KEY || s.maps.apiKey || '',
       services: s.services, garmentTypes: s.garmentTypes, delivery: s.delivery, loyalty: s.loyalty, paymentMethods: s.paymentMethods,
     };
@@ -341,8 +344,13 @@ function createApp(opts = {}) {
       if (!L.isValidPhone(phone)) errors['business.phone'] = 'Nomor HP tidak valid.';
       const lat = int(bb.lat, -90, 90, 'business.lat', 'Latitude harus antara -90 dan 90.');
       const lng = int(bb.lng, -180, 180, 'business.lng', 'Longitude harus antara -180 dan 180.');
+      // Medsos opsional: tidak dikirim = nilai lama dipertahankan; string kosong = disembunyikan dari website.
+      const instagram = bb.instagram === undefined ? next.business.instagram : String(bb.instagram || '').trim().replace(/^@/, '');
+      if (instagram && !/^[A-Za-z0-9._]{1,30}$/.test(instagram)) errors['business.instagram'] = 'Username Instagram hanya huruf, angka, titik, dan garis bawah (maksimal 30).';
+      const email = bb.email === undefined ? next.business.email : String(bb.email || '').trim();
+      if (email && !(email.length <= 100 && /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(email))) errors['business.email'] = 'Alamat email tidak valid.';
       if (!errors['business.name'] && !errors['business.phone'] && lat != null && lng != null) {
-        Object.assign(next.business, { name, phone, whatsapp: '62' + phone.slice(1), address: L.cleanStr(bb.address, 200), lat, lng });
+        Object.assign(next.business, { name, phone, whatsapp: '62' + phone.slice(1), address: L.cleanStr(bb.address, 200), lat, lng, instagram, email });
       }
     }
     if (b.maps) {
@@ -369,6 +377,13 @@ function createApp(opts = {}) {
       if (perKm != null) next.delivery.perKm = Math.round(perKm);
       if (maxKm != null) next.delivery.maxKm = maxKm;
       next.delivery.chargePerLeg = !!d.chargePerLeg;
+      const openTime = d.openTime === undefined ? next.delivery.openTime : String(d.openTime);
+      const closeTime = d.closeTime === undefined ? next.delivery.closeTime : String(d.closeTime);
+      if (!L.TIME_RE.test(openTime)) errors['delivery.openTime'] = 'Isi jam buka dengan format JJ:MM.';
+      if (!L.TIME_RE.test(closeTime)) errors['delivery.closeTime'] = 'Isi jam tutup dengan format JJ:MM.';
+      else if (L.TIME_RE.test(openTime) && closeTime <= openTime) errors['delivery.closeTime'] = 'Jam tutup harus lebih lambat dari jam buka.';
+      next.delivery.openTime = openTime;
+      next.delivery.closeTime = closeTime;
     }
     if (b.loyalty) {
       const l = b.loyalty;
