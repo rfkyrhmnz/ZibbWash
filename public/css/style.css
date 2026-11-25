@@ -329,7 +329,7 @@ li:first-child > .board-row { border-top: 1px solid var(--line); }
 .pubfoot p { margin: 0; flex: 1; min-width: 200px; }
 .pubfoot a { color: var(--ink-3); }
 
-/* jam pengiriman */
+/* jam operasional */
 .courier { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 16px; padding: 12px 14px; background: #fff; border: 1px solid var(--line); border-radius: var(--r); font-size: .92rem; color: var(--ink-2); }
 .courier b { color: var(--navy); white-space: nowrap; }
 .courier .ic { color: var(--lagoon); }

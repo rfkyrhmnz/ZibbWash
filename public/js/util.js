@@ -52,7 +52,7 @@ export const waLink = (wa, text) => `https://wa.me/${wa}${text ? `?text=${encode
 export const mapsLink = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 export const phonePretty = (p) => String(p).replace(/^(\d{4})(\d{4})(\d+)$/, '$1-$2-$3');
 
-// ───────── jam pengiriman (WIB), padanan lib/logic.js ─────────
+// ───────── jam operasional (WIB), padanan lib/logic.js ─────────
 const toMinutes = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3));
 export function courierStatus(delivery, now = new Date()) {
   const t = toMinutes(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now));
@@ -64,12 +64,12 @@ export const jam = (hm) => String(hm).replace(':', '.');
 export const courierHours = (d) => `${jam(d.openTime)}–${jam(d.closeTime)} WIB`;
 /** Kalimat kapan kurir buka lagi, mis. "besok pukul 06.00 WIB". */
 export const courierNext = (d) => `${courierStatus(d).nextDay ? 'besok' : 'hari ini'} pukul ${jam(d.openTime)} WIB`;
-/** Baris "Jam pengiriman" + lencana buka/tutup saat ini. */
+/** Baris "Jam operasional" + lencana buka/tutup saat ini. */
 export function courierInfo(d) {
   const { open } = courierStatus(d);
   return html`
     <div class="courier">
-      ${icon('clock', 20)}<span>Jam pengiriman <b>${courierHours(d)}</b></span>
+      ${icon('clock', 20)}<span>Jam operasional <b>${courierHours(d)}</b></span>
       <span class="chip ${open ? 'chip-ok' : 'chip-off'}"><i></i>${open ? 'Sedang buka' : 'Sedang tutup'}</span>
     </div>`;
 }

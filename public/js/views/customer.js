@@ -239,7 +239,7 @@ export async function orderForm({ container, query }) {
     if (st.handover === 'pickup' && !c.open) {
       note = html`<div class="notice notice-wait slim">${icon('info', 18)}<span><b>Kurir sedang tutup.</b> Pesanan tetap bisa dikirim, penjemputan dilakukan mulai ${courierNext(d)}.</span></div>`;
     } else if (legs() > 0) {
-      note = html`<p class="hint">Kurir hanya menjemput dan mengantar pada jam pengiriman.</p>`;
+      note = html`<p class="hint">Kurir hanya menjemput dan mengantar pada jam operasional.</p>`;
     }
     const markup = String(html`${courierInfo(d)}${note}`);
     // Hanya ditulis ulang bila isinya berubah, supaya pembaca layar tidak mengulang pesan yang sama.

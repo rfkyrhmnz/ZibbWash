@@ -189,7 +189,7 @@ Alur status mengikuti pilihan pelanggan:
 | Ongkir di atas batas gratis | Rp3.000 per km, kelebihan jarak dibulatkan ke atas | idem |
 | Ongkir per arah | aktif: jemput dan antar dihitung masing-masing | idem |
 | Jangkauan maksimal antar-jemput | 20 km | idem |
-| Jam pengiriman (kurir) | 06.00–18.00 WIB | idem |
+| Jam Operasional (kurir) | 06.00–18.00 WIB | idem |
 | Instagram dan email | contoh (fiktif): `zibbwash.laundry`, `halo@zibbwash.example` | idem |
 | Stamp | 1 stamp untuk transaksi minimal Rp30.000 (setelah diskon) | idem |
 | Hadiah | 10 stamp = voucher gratis Wash & Fold maksimal 3 kg | idem |
@@ -242,7 +242,7 @@ scripts/seed-demo.js data contoh
 test/api.test.js     uji alur lengkap lewat HTTP
 test/production.test.js  uji pemasangan online: kata sandi admin, SSE, cadangan, IP
 test/remote.test.js  uji penyimpanan Upstash (dengan server Upstash tiruan)
-test/hours.test.js   uji nilai batas jam pengiriman serta validasi jam dan medsos
+test/hours.test.js   uji nilai batas jam Operasional serta validasi jam dan medsos
 render.yaml          Blueprint Render gratis (data di Upstash)
 Dockerfile           image untuk hosting container (Suga dan sejenisnya)
 deploy/render.starter.yaml  Blueprint Render berbayar (disk permanen)
@@ -276,7 +276,7 @@ Semua endpoint selain publik menolak tamu (401), dan endpoint admin menolak pela
 npm test
 ```
 
-43 skenario otomatis (sebagian besar black box lewat HTTP), memakai database sementara (data asli tidak tersentuh): kontrol akses per peran, validasi form, hitung ongkir, alur pesan sampai stamp, voucher, pembatalan, pengaturan tarif, keamanan dasar (JSON rusak, path traversal, pembatas login), serta untuk pemasangan online: kata sandi admin acak, urutan lokasi database, pembaca IP di balik proxy (termasuk upaya memalsukan header), pembaruan langsung hanya ke yang berhak, dan cadangan data. Penyimpanan Upstash diuji dengan server tiruan: pemulihan setelah disk hilang, penggabungan kiriman, kirim ulang saat Upstash gagal, balasan hilang tetapi kiriman sudah masuk, dua instance yang saling menimpa, dan menolak start bila Upstash mati. Jam pengiriman diuji pada nilai batasnya (05.59, 06.00, 17.59, 18.00) dengan waktu yang disuntikkan, beserta validasi jam dan medsos. Skrip Lua pengecekan versi juga sudah dicoba di redis-server sungguhan.
+43 skenario otomatis (sebagian besar black box lewat HTTP), memakai database sementara (data asli tidak tersentuh): kontrol akses per peran, validasi form, hitung ongkir, alur pesan sampai stamp, voucher, pembatalan, pengaturan tarif, keamanan dasar (JSON rusak, path traversal, pembatas login), serta untuk pemasangan online: kata sandi admin acak, urutan lokasi database, pembaca IP di balik proxy (termasuk upaya memalsukan header), pembaruan langsung hanya ke yang berhak, dan cadangan data. Penyimpanan Upstash diuji dengan server tiruan: pemulihan setelah disk hilang, penggabungan kiriman, kirim ulang saat Upstash gagal, balasan hilang tetapi kiriman sudah masuk, dua instance yang saling menimpa, dan menolak start bila Upstash mati. Jam Operasional diuji pada nilai batasnya (05.59, 06.00, 17.59, 18.00) dengan waktu yang disuntikkan, beserta validasi jam dan medsos. Skrip Lua pengecekan versi juga sudah dicoba di redis-server sungguhan.
 
 ## Catatan sebelum dipakai sungguhan
 

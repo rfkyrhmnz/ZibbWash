@@ -125,7 +125,7 @@ export async function orders({ container, params }) {
           <ol class="stepper">
             ${o.flow.map((s) => html`<li class="${s.state}"><span>${s.state === 'done' ? icon('check', 12) : ''}</span>${s.label}</li>`)}
           </ol>
-          ${offHours ? html`<div class="notice notice-wait slim">${icon('clock', 18)}<span><b>Di luar jam pengiriman (${courierHours(state.config.delivery)}).</b> Tahap berikutnya butuh kurir.</span></div>` : ''}
+          ${offHours ? html`<div class="notice notice-wait slim">${icon('clock', 18)}<span><b>Di luar jam operasional (${courierHours(state.config.delivery)}).</b> Tahap berikutnya butuh kurir.</span></div>` : ''}
           ${closed ? html`<p class="hint">Pesanan yang sudah ${o.status === 'done' ? 'selesai' : 'dibatalkan'} tidak bisa diubah lagi.</p>` : html`
             <form id="status-form" class="form" novalidate>
               <div class="field"><label for="st">Ubah status ke</label>

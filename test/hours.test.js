@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Jam pengiriman dan media sosial.
+ * Jam operasional dan media sosial.
  * Aturan waktu diuji dengan waktu yang disuntikkan (nilai batas), jadi hasilnya sama kapan pun tes dijalankan.
  */
 const test = require('node:test');
@@ -26,7 +26,7 @@ const CASES = [
   ['23:59', false, true],
 ];
 
-test('nilai batas jam pengiriman 06.00–18.00 WIB', () => {
+test('nilai batas jam operasional 06.00–18.00 WIB', () => {
   const { delivery } = defaultSettings();
   for (const [hm, open, nextDay] of CASES) {
     assert.deepEqual(L.courierStatus(delivery, wib(hm)), { open, nextDay }, hm);
@@ -60,7 +60,7 @@ test('catatan pesanan jemput mengikuti jam pemesanan', () => {
   assert.equal(place('22:00', 'dropoff'), 'Menunggu pakaian diantar ke outlet.');
 });
 
-test('database lama otomatis mendapat jam pengiriman dan medsos', () => {
+test('database lama otomatis mendapat jam operasional dan medsos', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zw-old-'));
   const file = path.join(tmp, 'db.json');
   const old = createDefaultDb('admin123');

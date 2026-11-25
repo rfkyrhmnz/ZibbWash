@@ -54,7 +54,7 @@ export function landingView({ container }) {
           </div>
           <ul class="hero-facts">
             <li>${icon('truck', 18)}Antar-jemput gratis sampai ${freeKm} km</li>
-            <li>${icon('clock', 18)}Jam pengiriman ${courierHours(cfg.delivery)}</li>
+            <li>${icon('clock', 18)}Jam operasional ${courierHours(cfg.delivery)}</li>
             <li>${icon('scale', 18)}Tagihan dari berat timbangan sebenarnya</li>
             <li>${icon('gift', 18)}${stampsForReward} stamp, cuci Wash & Fold gratis</li>
           </ul>
@@ -169,7 +169,7 @@ export function landingView({ container }) {
 
     <footer class="pubfoot">
       <div class="brand brand-sm"><img src="/img/logo-mark.png" alt="" width="26" height="29"><span>${cfg.business.name}</span></div>
-      <p>${cfg.business.address}<br>Jam pengiriman ${courierHours(cfg.delivery)}</p>
+      <p>${cfg.business.address}<br>Jam operasional ${courierHours(cfg.delivery)}</p>
       ${socials('socials-foot')}
       <a href="#/masuk?role=admin">Masuk sebagai admin</a>
     </footer>
