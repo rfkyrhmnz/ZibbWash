@@ -61,7 +61,6 @@ export function landingView({ container }) {
         </div>
 
         <div class="hero-art">
-          <img class="hero-logo" src="/img/logo.png" alt="Logo ZibbWash Laundry" width="380" height="394">
           <article class="ticket" aria-label="Contoh tampilan tracking pesanan">
             <header class="ticket-head">
               <span class="ticket-id">ZW-261123-014</span>

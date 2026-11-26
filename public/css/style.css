@@ -213,6 +213,10 @@ dialog.modal[open] { animation: pop .22s ease-out; }
 .pubnav-links a { color: var(--ink-2); font-weight: 600; font-size: .92rem; text-decoration: none; padding: 8px 14px; border-radius: 999px; }
 .pubnav-links a:hover { background: var(--mist); color: var(--marine); }
 
+/* Latar hero memakai 100vw (termasuk lebar scrollbar); kelebihannya dipotong agar halaman tidak bergeser ke samping.
+   `clip`, bukan `hidden`, supaya navbar sticky tetap berfungsi. */
+.public { overflow-x: clip; }
+
 .hero { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 32px; align-items: center; max-width: var(--maxw); margin: 0 auto; padding: 64px 20px 96px; }
 .hero::before { content: ""; position: absolute; z-index: -2; inset: 0 calc(50% - 50vw); background: linear-gradient(180deg, var(--mist) 0%, var(--paper) 100%); }
 .hero-bg { max-width: none; position: absolute; z-index: -1; left: calc(50% - 50vw); width: 100vw; bottom: 0; height: 72%; pointer-events: none; }
@@ -223,10 +227,9 @@ dialog.modal[open] { animation: pop .22s ease-out; }
 .hero-facts li { display: flex; align-items: center; gap: 10px; }
 .hero-facts .ic { color: var(--lagoon); }
 
-.hero-art { position: relative; min-height: 570px; }
-.hero-logo { position: absolute; top: 0; right: 0; width: min(400px, 78%); height: auto; filter: drop-shadow(0 24px 30px rgba(8, 121, 153, .25)); }
+.hero-art { display: grid; justify-items: center; }
 .ticket {
-  position: absolute; left: 0; bottom: 0; width: min(330px, 86%); background: #fff; border-radius: 20px; padding: 18px 20px 14px;
+  width: min(360px, 100%); background: #fff; border-radius: 20px; padding: 18px 20px 14px;
   box-shadow: var(--shadow-pop), 0 0 0 1px rgba(8, 121, 153, .08);
 }
 .ticket-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -605,9 +608,7 @@ li:first-child > .board-row { border-top: 1px solid var(--line); }
 @media (max-width: 960px) {
   .hero { grid-template-columns: 1fr; padding: 40px 20px 72px; }
   .hero-copy h1 { max-width: 16ch; }
-  .hero-art { min-height: 0; display: grid; justify-items: center; gap: 0; padding-top: 12px; }
-  .hero-logo { position: static; width: min(260px, 64%); }
-  .ticket { position: relative; width: min(360px, 100%); margin-top: -34px; }
+  .hero-art { padding-top: 12px; }
   .split-2 { grid-template-columns: 1fr; gap: 32px; }
   .section { padding: 60px 20px; }
   .dash-grid, .track-grid, .stamp-page { grid-template-columns: 1fr; }
